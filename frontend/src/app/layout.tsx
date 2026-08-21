@@ -23,7 +23,7 @@ const monoFont = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SyllabusBond — Course Delivery Escrow on GenLayer",
+  title: "SyllabusBond",
   description:
     "An academic escrow protocol that holds tuition fees until verifiable public evidence proves syllabus delivery.",
 };
