@@ -1,0 +1,20 @@
+# Environment and wallet configuration
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# JavaScript build artifacts
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Python test and bytecode artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local tooling output
+artifacts/
+.vercel/
