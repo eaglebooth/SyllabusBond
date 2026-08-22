@@ -189,11 +189,11 @@ class SyllabusBond(gl.Contract):
         now = self._now()
         # Testnet profile: keep the complete demonstrable lifecycle bounded.
         # The committed duration remains stored as the promised course term.
-        delivery_deadline = now + u256(300)
+        delivery_deadline = now + u256(30)
         # Short bounded windows keep the public testnet lifecycle demonstrable;
         # delivery remains governed by the organizer's promised duration.
-        challenge_deadline = delivery_deadline + u256(300)
-        recovery_deadline = challenge_deadline + u256(300)
+        challenge_deadline = delivery_deadline + u256(30)
+        recovery_deadline = challenge_deadline + u256(30)
         self.offering_organizer[offering_id] = organizer
         self.offering_title[offering_id] = title
         self.offering_course_id[offering_id] = course_id
