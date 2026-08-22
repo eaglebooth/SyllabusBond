@@ -1,7 +1,7 @@
 # SyllabusBond — Decentralized Syllabus Delivery & Tuition Escrow
 
-> **Deployed Contract Target**: `0xFdc5DBC2F068530e4C9f71A3307cA3d1110CD408` (GenLayer Studionet, Chain 61999)  
-> **Explorer**: [https://studio.genlayer.com/explorer/address/0xFdc5DBC2F068530e4C9f71A3307cA3d1110CD408](https://studio.genlayer.com/explorer/address/0xFdc5DBC2F068530e4C9f71A3307cA3d1110CD408)
+> **Deployed Contract Target**: `0xd6763425A77c718b792C1F4C1E8c115efF66Bb2f` (GenLayer Studionet, Chain 61999)  
+> **Explorer**: [https://studio.genlayer.com/explorer/address/0xd6763425A77c718b792C1F4C1E8c115efF66Bb2f](https://studio.genlayer.com/explorer/address/0xd6763425A77c718b792C1F4C1E8c115efF66Bb2f)
 
 ---
 
