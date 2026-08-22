@@ -1,7 +1,7 @@
 # SyllabusBond — Decentralized Syllabus Delivery & Tuition Escrow
 
-> **Deployed Contract Target**: `0xd6763425A77c718b792C1F4C1E8c115efF66Bb2f` (GenLayer Studionet, Chain 61999)  
-> **Explorer**: [https://studio.genlayer.com/explorer/address/0xd6763425A77c718b792C1F4C1E8c115efF66Bb2f](https://studio.genlayer.com/explorer/address/0xd6763425A77c718b792C1F4C1E8c115efF66Bb2f)
+> **Deployed Contract Target**: `0x5256Af3C6184F06db90a9b4aA14cc4e9947A3CE6` (GenLayer Studionet, Chain 61999)  
+> **Explorer**: [https://studio.genlayer.com/explorer/address/0x5256Af3C6184F06db90a9b4aA14cc4e9947A3CE6](https://studio.genlayer.com/explorer/address/0x5256Af3C6184F06db90a9b4aA14cc4e9947A3CE6)
 
 > **Testnet timing profile**: delivery uses the committed duration; challenge and recovery each use a bounded 5-minute window so the complete lifecycle can be reproduced on Studionet.
 
