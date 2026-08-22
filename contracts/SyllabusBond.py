@@ -188,8 +188,10 @@ class SyllabusBond(gl.Contract):
         offering_id = self.offering_count
         now = self._now()
         delivery_deadline = now + duration_hours * u256(3600)
-        challenge_deadline = delivery_deadline + u256(86400)
-        recovery_deadline = challenge_deadline + u256(86400)
+        # Short bounded windows keep the public testnet lifecycle demonstrable;
+        # delivery remains governed by the organizer's promised duration.
+        challenge_deadline = delivery_deadline + u256(300)
+        recovery_deadline = challenge_deadline + u256(300)
         self.offering_organizer[offering_id] = organizer
         self.offering_title[offering_id] = title
         self.offering_course_id[offering_id] = course_id

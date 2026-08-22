@@ -3,6 +3,8 @@
 > **Deployed Contract Target**: `0xd6763425A77c718b792C1F4C1E8c115efF66Bb2f` (GenLayer Studionet, Chain 61999)  
 > **Explorer**: [https://studio.genlayer.com/explorer/address/0xd6763425A77c718b792C1F4C1E8c115efF66Bb2f](https://studio.genlayer.com/explorer/address/0xd6763425A77c718b792C1F4C1E8c115efF66Bb2f)
 
+> **Testnet timing profile**: delivery uses the committed duration; challenge and recovery each use a bounded 5-minute window so the complete lifecycle can be reproduced on Studionet.
+
 ---
 
 ## 1. Overview & GenLayer Fit

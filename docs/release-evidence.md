@@ -4,6 +4,8 @@
 **Deployed Contract Target**: `0xd6763425A77c718b792C1F4C1E8c115efF66Bb2f` (GenLayer Studionet, Chain 61999)  
 **Explorer**: [https://studio.genlayer.com/explorer/address/0xd6763425A77c718b792C1F4C1E8c115efF66Bb2f](https://studio.genlayer.com/explorer/address/0xd6763425A77c718b792C1F4C1E8c115efF66Bb2f)
 
+**Testnet timing profile**: delivery follows the committed duration; challenge and recovery windows are each 5 minutes for reproducible lifecycle evidence.
+
 | Gate / Feature | Status | Evidence Summary & Proof Location |
 |---|---|---|
 | **Toolchain & Headers** | `PASS` | Verified header `# v0.2.16`, `Depends: py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6`, syntax parsed with Python AST. |
