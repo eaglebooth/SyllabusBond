@@ -3,12 +3,12 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/Header";
-import { connectWallet, writeContract } from "@/lib/genlayer";
+import { connectWallet, readContract, writeContract } from "@/lib/genlayer";
 
 export default function CreateOfferingPage() {
   const [account, setAccount] = useState("");
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [createdId, setCreatedId] = useState<number>(0);
+  const [createdId, setCreatedId] = useState<bigint | null>(null);
 
   // Step 1: Course Identity
   const [title, setTitle] = useState("");
@@ -80,10 +80,35 @@ export default function CreateOfferingPage() {
         return;
       }
 
+      // GenLayer receipts expose the contract return value on different runtime
+      // versions; use it when present and fall back to the post-write count.
+      const receipt = (res1.data ?? {}) as Record<string, unknown>;
+      let offeringId: bigint | null = null;
+      for (const key of ["returnData", "result", "returnValue", "data"]) {
+        const value = receipt[key];
+        if (typeof value === "number" || typeof value === "string" || typeof value === "bigint") {
+          try { offeringId = BigInt(value); break; } catch { /* try next representation */ }
+        }
+      }
+      if (offeringId === null) {
+        const counts = await readContract("get_counts", []);
+        const countData = (counts.data ?? {}) as Record<string, unknown>;
+        const count = countData.offering_count;
+        if (typeof count === "number" || typeof count === "string" || typeof count === "bigint") {
+          offeringId = BigInt(count) - BigInt(1);
+        }
+      }
+      if (offeringId === null || offeringId < BigInt(0)) {
+        setErrorMsg("Offering was accepted but its returned ID could not be resolved; refusing to guess an ID.");
+        setLoading(false);
+        return;
+      }
+      setCreatedId(offeringId);
+
       setStatusMsg("Step 2/2: Locking curriculum digest and instructor on-chain...");
 
       const res2 = await writeContract("lock_offering_curriculum", [
-        BigInt(createdId),
+        offeringId,
         curriculumDigest,
         instructor,
       ]);

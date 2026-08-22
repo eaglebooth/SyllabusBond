@@ -5,7 +5,7 @@ import {ExternalLink,RefreshCw} from "lucide-react";
 import {useWallet} from "@/lib/wallet";
 
 type Props={account?:string;onConnectWallet?:()=>void;onRefresh?:()=>void;isRefreshing?:boolean};
-const EXPLORER_URL="https://explorer-studio.genlayer.com/address/0xa003280c245Dc51043d1E909B9a897C955099fCf";
+const EXPLORER_URL="https://explorer-studio.genlayer.com/address/0xFdc5DBC2F068530e4C9f71A3307cA3d1110CD408";
 
 export const Header=({account="",onConnectWallet,onRefresh,isRefreshing=false}:Props)=>{
  const {connect,isConnecting}=useWallet();

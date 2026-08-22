@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { PlusCircle, Lock, BookOpen, Clock, AlertCircle, Sparkles, X } from "lucide-react";
 import { writeContract } from "@/lib/genlayer";
+import { readContract } from "@/lib/genlayer";
 
 type CreateOfferingModalProps = {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export const CreateOfferingModal: React.FC<CreateOfferingModalProps> = ({
   onSuccess,
 }) => {
   const [step, setStep] = useState<1 | 2>(1);
+  const [createdOfferingId, setCreatedOfferingId] = useState<bigint | null>(null);
 
   // Step 1: Base Offering
   const [title, setTitle] = useState("Autonomous AI Agents & Intelligent Contracts");
@@ -55,6 +57,25 @@ export const CreateOfferingModal: React.FC<CreateOfferingModalProps> = ({
       ]);
 
       if (res.success) {
+        const receipt = (res.data ?? {}) as Record<string, unknown>;
+        let offeringId: bigint | null = null;
+        for (const key of ["returnData", "result", "returnValue", "data"]) {
+          const value = receipt[key];
+          if (typeof value === "number" || typeof value === "string" || typeof value === "bigint") {
+            try { offeringId = BigInt(value); break; } catch { /* try next representation */ }
+          }
+        }
+        if (offeringId === null) {
+          const counts = await readContract("get_counts", []);
+          const countData = (counts.data ?? {}) as Record<string, unknown>;
+          const count = countData.offering_count;
+          if (typeof count === "number" || typeof count === "string" || typeof count === "bigint") offeringId = BigInt(count) - BigInt(1);
+        }
+        if (offeringId === null || offeringId < BigInt(0)) {
+          setErrorMsg("Offering accepted, but no reliable offering ID was returned.");
+          return;
+        }
+        setCreatedOfferingId(offeringId);
         setStatusMsg("Offering committed! Now locking curriculum & instructor...");
         setStep(2);
       } else {
@@ -75,7 +96,7 @@ export const CreateOfferingModal: React.FC<CreateOfferingModalProps> = ({
 
     try {
       const res = await writeContract("lock_offering_curriculum", [
-        BigInt(0), // default to offering 0 or latest
+        createdOfferingId as bigint,
         curriculumDigest,
         instructor,
       ]);

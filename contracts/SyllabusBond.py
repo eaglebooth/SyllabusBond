@@ -29,6 +29,9 @@ class SyllabusBond(gl.Contract):
     offering_course_id: TreeMap[u256, str]
     offering_fee: TreeMap[u256, u256]
     offering_duration_hours: TreeMap[u256, u256]
+    offering_delivery_deadline: TreeMap[u256, u256]
+    offering_challenge_deadline: TreeMap[u256, u256]
+    offering_recovery_deadline: TreeMap[u256, u256]
     offering_terms_url: TreeMap[u256, str]
     offering_terms_digest: TreeMap[u256, str]
     offering_curriculum_digest: TreeMap[u256, str]
@@ -63,6 +66,19 @@ class SyllabusBond(gl.Contract):
 
     def _valid_address(self, value: str) -> bool:
         return value.startswith("0x") and len(value) == 42
+
+    def _now(self) -> u256:
+        try:
+            return gl.get_block_timestamp()
+        except Exception:
+            return u256(0)
+
+    def _timing_available(self) -> bool:
+        try:
+            gl.get_block_timestamp()
+            return True
+        except Exception:
+            return False
 
     def _valid_immutable_url(self, value: str) -> bool:
         lowered = value.lower()
@@ -157,11 +173,18 @@ class SyllabusBond(gl.Contract):
             raise gl.vm.UserError("INVALID_TERMS_DIGEST")
 
         offering_id = self.offering_count
+        now = self._now()
+        delivery_deadline = now + duration_hours * u256(3600)
+        challenge_deadline = delivery_deadline + u256(86400)
+        recovery_deadline = challenge_deadline + u256(86400)
         self.offering_organizer[offering_id] = organizer
         self.offering_title[offering_id] = title
         self.offering_course_id[offering_id] = course_id
         self.offering_fee[offering_id] = fee
         self.offering_duration_hours[offering_id] = duration_hours
+        self.offering_delivery_deadline[offering_id] = delivery_deadline
+        self.offering_challenge_deadline[offering_id] = challenge_deadline
+        self.offering_recovery_deadline[offering_id] = recovery_deadline
         self.offering_terms_url[offering_id] = terms_url
         self.offering_terms_digest[offering_id] = terms_digest.lower()
         self.offering_curriculum_digest[offering_id] = ""
@@ -182,6 +205,8 @@ class SyllabusBond(gl.Contract):
         organizer = gl.message.sender_address.as_hex.lower()
         if organizer != self.offering_organizer[offering_id]:
             raise gl.vm.UserError("ORGANIZER_ONLY")
+        if self._timing_available() and self._now() >= self.offering_delivery_deadline[offering_id]:
+            raise gl.vm.UserError("DELIVERY_WINDOW_CLOSED")
         if self.offering_status[offering_id] != "AWAITING_CURRICULUM_LOCK":
             raise gl.vm.UserError("CURRICULUM_ALREADY_LOCKED")
         if not self._valid_digest(curriculum_digest):
@@ -200,6 +225,8 @@ class SyllabusBond(gl.Contract):
             raise gl.vm.UserError("OFFERING_NOT_FOUND")
         if self.offering_status[offering_id] != "OPEN":
             raise gl.vm.UserError("OFFERING_NOT_OPEN")
+        if self._timing_available() and self._now() >= self.offering_delivery_deadline[offering_id]:
+            raise gl.vm.UserError("DELIVERY_WINDOW_CLOSED")
 
         student = gl.message.sender_address.as_hex.lower()
         if student == self.offering_organizer[offering_id]:
@@ -250,8 +277,10 @@ class SyllabusBond(gl.Contract):
         if organizer != self.offering_organizer[offering_id]:
             raise gl.vm.UserError("ORGANIZER_ONLY")
         status = self.enrollment_status[enrollment_id]
-        if status != "FUNDED" and status != "RECOVERY_WAIT":
+        if status != "FUNDED":
             raise gl.vm.UserError("CANNOT_SUBMIT_DELIVERY_IN_CURRENT_STATE")
+        if self._timing_available() and self._now() > self.offering_delivery_deadline[offering_id]:
+            raise gl.vm.UserError("DELIVERY_WINDOW_CLOSED")
         if not self._valid_immutable_url(delivery_url):
             raise gl.vm.UserError("IMMUTABLE_DELIVERY_URL_REQUIRED")
         if not self._valid_digest(delivery_digest):
@@ -282,6 +311,9 @@ class SyllabusBond(gl.Contract):
             raise gl.vm.UserError("STUDENT_ONLY")
         if self.enrollment_status[enrollment_id] != "CHALLENGE_WINDOW":
             raise gl.vm.UserError("CHALLENGE_WINDOW_NOT_OPEN")
+        offering_id = self.enrollment_offering[enrollment_id]
+        if self._timing_available() and self._now() > self.offering_challenge_deadline[offering_id]:
+            raise gl.vm.UserError("CHALLENGE_WINDOW_CLOSED")
         if not self._valid_immutable_url(dispute_url):
             raise gl.vm.UserError("IMMUTABLE_DISPUTE_URL_REQUIRED")
         if not self._valid_digest(dispute_digest):
@@ -308,6 +340,8 @@ class SyllabusBond(gl.Contract):
             raise gl.vm.UserError("PARTY_ONLY")
         if self.enrollment_status[enrollment_id] != "CHALLENGE_WINDOW":
             raise gl.vm.UserError("CHALLENGE_WINDOW_NOT_ACTIVE")
+        if self._timing_available() and self._now() < self.offering_challenge_deadline[offering_id]:
+            raise gl.vm.UserError("CHALLENGE_WINDOW_ACTIVE")
 
         self.enrollment_status[enrollment_id] = "READY_FOR_REVIEW"
         self.enrollment_reason[enrollment_id] = "Challenge window passed; ready for AI jury review."
@@ -345,6 +379,8 @@ class SyllabusBond(gl.Contract):
             raise gl.vm.UserError("NOT_READY_FOR_REVIEW")
 
         offering_id = self.enrollment_offering[enrollment_id]
+        if self._timing_available() and self._now() < self.offering_challenge_deadline[offering_id]:
+            raise gl.vm.UserError("CHALLENGE_WINDOW_ACTIVE")
         title = self.offering_title[offering_id]
         course_id = self.offering_course_id[offering_id]
         instructor = self.offering_instructor[offering_id]
@@ -519,6 +555,8 @@ A paying outcome and non-paying outcome are NEVER equivalent."""
 
         if sender != organizer and sender != student:
             raise gl.vm.UserError("PARTY_ONLY")
+        if self._timing_available() and self._now() < self.offering_recovery_deadline[offering_id]:
+            raise gl.vm.UserError("RECOVERY_WINDOW_ACTIVE")
 
         fee = self.enrollment_fee[enrollment_id]
         if fee > self.total_held or fee > self.balance:
@@ -564,6 +602,9 @@ A paying outcome and non-paying outcome are NEVER equivalent."""
             "course_id": self.offering_course_id[offering_id],
             "fee": int(self.offering_fee[offering_id]),
             "duration_hours": int(self.offering_duration_hours[offering_id]),
+            "delivery_deadline": int(self.offering_delivery_deadline[offering_id]),
+            "challenge_deadline": int(self.offering_challenge_deadline[offering_id]),
+            "recovery_deadline": int(self.offering_recovery_deadline[offering_id]),
             "terms_url": self.offering_terms_url[offering_id],
             "terms_digest": self.offering_terms_digest[offering_id],
             "curriculum_digest": self.offering_curriculum_digest[offering_id],

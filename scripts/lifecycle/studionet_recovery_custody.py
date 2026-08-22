@@ -12,7 +12,7 @@ from genlayer_py import create_account, create_client
 from genlayer_py.chains import studionet
 
 
-ADDRESS = "0xa003280c245Dc51043d1E909B9a897C955099fCf"
+ADDRESS = "0xFdc5DBC2F068530e4C9f71A3307cA3d1110CD408"
 RPC_URL = "https://studio.genlayer.com/api"
 FEE = 10**18
 UNAVAILABLE_CID = "Qm" + ("a" * 44)
