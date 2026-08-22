@@ -69,14 +69,27 @@ class SyllabusBond(gl.Contract):
 
     def _now(self) -> u256:
         try:
-            return gl.get_block_timestamp()
+            raw = str(gl.message_raw["datetime"])
+            year = int(raw[0:4])
+            month = int(raw[5:7])
+            day = int(raw[8:10])
+            hour = int(raw[11:13])
+            minute = int(raw[14:16])
+            second = int(raw[17:19])
+            adjusted_year = year - (1 if month <= 2 else 0)
+            era = adjusted_year // 400
+            year_of_era = adjusted_year - era * 400
+            shifted_month = month - 3 if month > 2 else month + 9
+            day_of_year = (153 * shifted_month + 2) // 5 + day - 1
+            day_of_era = year_of_era * 365 + year_of_era // 4 - year_of_era // 100 + day_of_year
+            days_since_epoch = era * 146097 + day_of_era - 719468
+            return u256(days_since_epoch * 86400 + hour * 3600 + minute * 60 + second)
         except Exception:
             return u256(0)
 
     def _timing_available(self) -> bool:
         try:
-            gl.get_block_timestamp()
-            return True
+            return len(str(gl.message_raw["datetime"])) >= 19
         except Exception:
             return False
 
