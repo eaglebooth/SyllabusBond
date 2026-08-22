@@ -100,6 +100,8 @@ class SyllabusBond(gl.Contract):
             prefix = "https://arweave.net/"
         elif lowered.startswith("https://ipfs.io/ipfs/"):
             prefix = "https://ipfs.io/ipfs/"
+        elif lowered.startswith("https://gateway.pinata.cloud/ipfs/"):
+            prefix = "https://gateway.pinata.cloud/ipfs/"
         identifier = lowered[len(prefix):]
         return (
             prefix != ""
