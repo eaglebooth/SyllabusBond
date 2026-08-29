@@ -7,7 +7,7 @@
 - Primary category: Education
 - Category tag 1: Tuition Escrow
 - Category tag 2: Evidence Adjudication
-- Website: https://syllabusbond.vercel.app/
+- Website: https://frontend-five-eta-88.vercel.app/
 - GitHub: https://github.com/eaglebooth/SyllabusBond
 - Contract: https://explorer-studio.genlayer.com/address/0x85F77d08727Ca798875387E57736077258Be255D
 - Network: studionet
