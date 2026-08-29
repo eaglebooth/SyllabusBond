@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Header } from "@/components/Header";
 import { ContractTotals } from "@/lib/types";
 import { connectWallet, readContract, configuredAddress } from "@/lib/genlayer";
+import { asGenBigInt, formatGen } from "@/lib/amount";
 
 export default function VerifyPage() {
   const [account, setAccount] = useState("");
@@ -49,8 +50,10 @@ export default function VerifyPage() {
   };
 
   const invariantHolds =
-    totals.total_received ===
-    totals.total_held + totals.total_paid_to_organizers + totals.total_refunded_to_students;
+    asGenBigInt(totals.total_received) ===
+    asGenBigInt(totals.total_held) +
+      asGenBigInt(totals.total_paid_to_organizers) +
+      asGenBigInt(totals.total_refunded_to_students);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#fbfaf7] text-[#1c1917]">
@@ -110,22 +113,22 @@ export default function VerifyPage() {
           <div className="space-y-2 text-xs">
             <div className="flex justify-between p-3 bg-[#f6f3eb] rounded border border-[#eae5d9]">
               <span className="font-medium text-[#44403c]">1. Total Funds Received from Enrollments:</span>
-              <span className="font-mono font-bold text-[#1c1917]">{(totals.total_received / 1e18).toFixed(4)} GEN</span>
+              <span className="font-mono font-bold text-[#1c1917]">{formatGen(totals.total_received)}</span>
             </div>
 
             <div className="flex justify-between p-3 bg-[#f6f3eb] rounded border border-[#eae5d9]">
               <span className="font-medium text-[#1e3a8a]">2. Currently Held in Escrow:</span>
-              <span className="font-mono font-bold text-[#1e3a8a]">{(totals.total_held / 1e18).toFixed(4)} GEN</span>
+              <span className="font-mono font-bold text-[#1e3a8a]">{formatGen(totals.total_held)}</span>
             </div>
 
             <div className="flex justify-between p-3 bg-[#f6f3eb] rounded border border-[#eae5d9]">
               <span className="font-medium text-[#166534]">3. Disbursed to Course Organizers:</span>
-              <span className="font-mono font-bold text-[#166534]">{(totals.total_paid_to_organizers / 1e18).toFixed(4)} GEN</span>
+              <span className="font-mono font-bold text-[#166534]">{formatGen(totals.total_paid_to_organizers)}</span>
             </div>
 
             <div className="flex justify-between p-3 bg-[#f6f3eb] rounded border border-[#eae5d9]">
               <span className="font-medium text-[#44403c]">4. Refunded to Enrolled Students:</span>
-              <span className="font-mono font-bold text-[#1c1917]">{(totals.total_refunded_to_students / 1e18).toFixed(4)} GEN</span>
+              <span className="font-mono font-bold text-[#1c1917]">{formatGen(totals.total_refunded_to_students)}</span>
             </div>
           </div>
         </div>
@@ -163,7 +166,7 @@ export default function VerifyPage() {
           {activeAddress && activeAddress !== "0x0000000000000000000000000000000000000000" && (
             <div className="pt-2">
               <a
-                href={`https://studio.genlayer.com/explorer/address/${activeAddress}`}
+                href={`https://explorer-studio.genlayer.com/address/${activeAddress}`}
                 target="_blank"
                 rel="noreferrer"
                 className="btn-academic text-xs"
@@ -180,7 +183,7 @@ export default function VerifyPage() {
           <div>
             <span className="font-serif font-bold text-[#1c1917]">SyllabusBond</span> — Course delivery escrow protocol
           </div>
-          <div className="font-mono text-[11px]">Status: LOCAL_ONLY</div>
+          <div className="font-mono text-[11px]">Status: LIVE · STUDIONET</div>
         </div>
       </footer>
     </div>

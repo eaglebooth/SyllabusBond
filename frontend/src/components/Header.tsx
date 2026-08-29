@@ -1,8 +1,10 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import {usePathname} from "next/navigation";
 import {ExternalLink,RefreshCw} from "lucide-react";
 import {useWallet} from "@/lib/wallet";
+import {explorerUrl} from "@/lib/genlayer";
 
 type Props={account?:string;onConnectWallet?:()=>void;onRefresh?:()=>void;isRefreshing?:boolean};
 const EXPLORER_URL="https://explorer-studio.genlayer.com/address/0x85F77d08727Ca798875387E57736077258Be255D";
@@ -19,5 +21,5 @@ export const Header=({account="",onConnectWallet,onRefresh,isRefreshing=false}:P
   if(onConnectWallet){await onConnectWallet();return;}
   await connect();
  };
- return <header className="floating-nav"><Link href="/" className="brand-mark"><span className="brand-glyph">S</span><span>SyllabusBond</span></Link><nav className="nav-links">{links.map(l=><Link key={l.href} href={l.href} className={`nav-link ${pathname===l.href?"nav-link-active":""}`}>{l.name}</Link>)}</nav><div className="nav-actions"><span className="network-chip"><i className="network-dot"/>Studionet</span>{onRefresh&&<button onClick={onRefresh} disabled={isRefreshing} className="btn-secondary nav-utility !min-h-10 !px-3" title="Sync on-chain state"><RefreshCw size={15} className={isRefreshing?"animate-spin":""}/></button>}<a href={EXPLORER_URL} target="_blank" rel="noreferrer" className="btn-secondary nav-utility !min-h-10 !px-3" title="Open deployed contract in Studio Explorer" aria-label="Open deployed contract in Studio Explorer"><ExternalLink size={16}/></a><button onClick={handleConnect} disabled={isConnecting} className="btn-academic !min-h-10 !px-4 font-mono text-xs">{isConnecting?"Connecting…":short(account)}</button></div></header>;
+ return <header className="floating-nav"><Link href="/" className="brand-mark"><Image className="brand-logo" src="/syllabusbond-logo.png" alt="SyllabusBond" width={34} height={34} priority/><span>SyllabusBond</span></Link><nav className="nav-links">{links.map(l=><Link key={l.href} href={l.href} className={`nav-link ${pathname===l.href?"nav-link-active":""}`}>{l.name}</Link>)}</nav><div className="nav-actions"><span className="network-chip"><i className="network-dot"/>Studionet</span>{onRefresh&&<button onClick={onRefresh} disabled={isRefreshing} className="btn-secondary nav-utility !min-h-10 !px-3" title="Sync on-chain state" aria-label="Sync on-chain state"><RefreshCw size={15} className={isRefreshing?"animate-spin":""}/></button>}<a href={explorerUrl()} target="_blank" rel="noreferrer" className="btn-secondary nav-utility !min-h-10 !px-3" title="Open deployed contract in Studio Explorer" aria-label="Open deployed contract in Studio Explorer"><ExternalLink size={16}/></a><button onClick={handleConnect} disabled={isConnecting} className="btn-academic !min-h-10 !px-4 font-mono text-xs">{isConnecting?"Connecting…":short(account)}</button></div></header>;
 };

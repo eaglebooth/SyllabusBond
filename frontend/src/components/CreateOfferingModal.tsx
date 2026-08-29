@@ -2,13 +2,13 @@
 
 import React, { useState } from "react";
 import { PlusCircle, Lock, BookOpen, Clock, AlertCircle, Sparkles, X } from "lucide-react";
-import { writeContract } from "@/lib/genlayer";
-import { readContract } from "@/lib/genlayer";
+import { connectWallet, readContract, resolveCreatedOfferingId, writeContract } from "@/lib/genlayer";
+import { parseGenInput } from "@/lib/amount";
 
 type CreateOfferingModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: () => void | Promise<void>;
 };
 
 export const CreateOfferingModal: React.FC<CreateOfferingModalProps> = ({
@@ -22,7 +22,7 @@ export const CreateOfferingModal: React.FC<CreateOfferingModalProps> = ({
   // Step 1: Base Offering
   const [title, setTitle] = useState("Autonomous AI Agents & Intelligent Contracts");
   const [courseId, setCourseId] = useState("AI-AGENTS-2026");
-  const [feeEth, setFeeEth] = useState("0.05");
+  const [feeEth, setFeeEth] = useState("1");
   const [durationHours, setDurationHours] = useState("32");
   const [termsUrl, setTermsUrl] = useState("https://arweave.net/terms-syllabusbond-v1-immutable-source-proof");
   const [termsDigest, setTermsDigest] = useState("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
@@ -44,35 +44,27 @@ export const CreateOfferingModal: React.FC<CreateOfferingModalProps> = ({
     setStatusMsg("Submitting offering commitments to GenLayer...");
 
     try {
-      const feeWei = BigInt(Math.floor(parseFloat(feeEth) * 1e18));
+      const feeAmount = parseGenInput(feeEth);
       const durHours = BigInt(parseInt(durationHours, 10));
+      const wallet = await connectWallet();
+      if (!wallet.success || typeof wallet.data !== "string") throw new Error(wallet.error || "Connect an organizer wallet first.");
+      const beforeResult = await readContract("get_counts");
+      const beforeCount = beforeResult.success && beforeResult.data ? Number((beforeResult.data as { offering_count?: unknown }).offering_count) : NaN;
+      if (!Number.isInteger(beforeCount)) throw new Error("Could not read the offering counter before submission.");
 
       const res = await writeContract("create_offering", [
         title,
         courseId,
-        feeWei,
+        feeAmount,
         durHours,
         termsUrl,
         termsDigest,
       ]);
 
       if (res.success) {
-        const receipt = (res.data ?? {}) as Record<string, unknown>;
-        let offeringId: bigint | null = null;
-        for (const key of ["returnData", "result", "returnValue", "data"]) {
-          const value = receipt[key];
-          if (typeof value === "number" || typeof value === "string" || typeof value === "bigint") {
-            try { offeringId = BigInt(value); break; } catch { /* try next representation */ }
-          }
-        }
+        const offeringId = await resolveCreatedOfferingId(beforeCount, wallet.data, title, courseId);
         if (offeringId === null) {
-          const counts = await readContract("get_counts", []);
-          const countData = (counts.data ?? {}) as Record<string, unknown>;
-          const count = countData.offering_count;
-          if (typeof count === "number" || typeof count === "string" || typeof count === "bigint") offeringId = BigInt(count) - BigInt(1);
-        }
-        if (offeringId === null || offeringId < BigInt(0)) {
-          setErrorMsg("Offering accepted, but no reliable offering ID was returned.");
+          setErrorMsg("Offering was accepted, but its ID could not be matched safely to this organizer and course.");
           return;
         }
         setCreatedOfferingId(offeringId);
@@ -102,7 +94,13 @@ export const CreateOfferingModal: React.FC<CreateOfferingModalProps> = ({
       ]);
 
       if (res.success) {
-        onSuccess();
+        const verified = await readContract("get_offering", [createdOfferingId as bigint]);
+        const offering = verified.success ? verified.data as { id?: number; status?: string } : null;
+        if (!offering || Number(offering.id) !== Number(createdOfferingId) || offering.status !== "OPEN") {
+          setErrorMsg("Curriculum lock was accepted, but the OPEN offering could not be verified by read-back.");
+          return;
+        }
+        await onSuccess();
         onClose();
       } else {
         setErrorMsg(res.error || "Failed to lock curriculum.");

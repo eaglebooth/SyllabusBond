@@ -12,7 +12,7 @@ Unlike generic escrow contracts or template marketplaces, SyllabusBond binds spe
 - **Problem Solved**: Course creators and bootcamp organizers frequently cancel sessions, substitute unqualified teaching assistants for advertised celebrity instructors, truncate course duration, or drop entire promised modules without offering refunds. Traditional payment processors require lengthy chargeback processes that harm both legitimate educators and students.
 - **Settlement Rule**:
   - `DELIVERED`: Full delivery of promised curriculum and instructor commitments -> 100% tuition payout to Organizer.
-  - `MATERIALLY_REDUCED`: Course took place but was truncated in duration, substituted instructors without notice, or omitted promised modules -> 50% payout to Organizer, 50% refund to Student (with any odd wei remainder deterministically refunded to the Student).
+  - `MATERIALLY_REDUCED`: Course took place but was truncated in duration, substituted instructors without notice, or omitted promised modules -> 50% payout to Organizer, 50% refund to Student (with any odd whole-GEN remainder deterministically refunded to the Student).
   - `NOT_DELIVERED`: Course was cancelled, failed to occur, or suffered total breach -> 100% refund to Student, 0% to Organizer.
   - `EVIDENCE_UNAVAILABLE`: Source data missing or corrupted -> transitions to a bounded `RECOVERY_WAIT` state with deterministic non-vetoable fallback.
 
@@ -23,7 +23,7 @@ Unlike generic escrow contracts or template marketplaces, SyllabusBond binds spe
    - Provides immutable delivery evidence (session recordings, syllabus coverage logs, attendance ledger).
    - Authenticated strictly via `gl.message.sender_address`.
 2. **Student**:
-   - Enrolls by depositing the exact tuition fee in wei via payable write.
+   - Enrolls by depositing the exact tuition fee in the contract's whole-GEN unit via payable write.
    - Holds a dedicated challenge window to submit dispute packets if commitments were breached.
    - Authenticated strictly via `gl.message.sender_address`.
 

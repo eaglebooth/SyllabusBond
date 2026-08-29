@@ -26,6 +26,7 @@ export const metadata: Metadata = {
   title: "SyllabusBond",
   description:
     "An academic escrow protocol that holds tuition fees until verifiable public evidence proves syllabus delivery.",
+  icons: { icon: "/syllabusbond-logo.png", apple: "/syllabusbond-logo.png" },
 };
 
 export default function RootLayout({

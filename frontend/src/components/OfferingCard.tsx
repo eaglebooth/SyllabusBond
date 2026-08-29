@@ -4,12 +4,13 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { Offering } from "@/lib/types";
 import { writeContract } from "@/lib/genlayer";
+import { asGenBigInt, formatGen } from "@/lib/amount";
 
 type OfferingCardProps = {
   offering: Offering;
   account: string;
   isEnrolled: boolean;
-  onEnrolledSuccess: () => void;
+  onEnrolledSuccess: () => Promise<boolean>;
   onSelectEnrollment: (offeringId: number) => void;
 };
 
@@ -23,7 +24,7 @@ export const OfferingCard: React.FC<OfferingCardProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const feeFormatted = (offering.fee / 1e18).toFixed(4);
+  const feeFormatted = formatGen(offering.fee);
   const isOrganizer = account.toLowerCase() === offering.organizer.toLowerCase();
 
   const handleEnroll = async () => {
@@ -35,9 +36,10 @@ export const OfferingCard: React.FC<OfferingCardProps> = ({
     setErrorMsg("");
 
     try {
-      const res = await writeContract("enroll", [BigInt(offering.id)], BigInt(offering.fee));
+      const res = await writeContract("enroll", [BigInt(offering.id)], asGenBigInt(offering.fee));
       if (res.success) {
-        onEnrolledSuccess();
+        const verified = await onEnrolledSuccess();
+        if (!verified) setErrorMsg("Enrollment was accepted, but authoritative read-back failed.");
       } else {
         setErrorMsg(res.error || "Enrollment transaction failed.");
       }
@@ -105,7 +107,7 @@ export const OfferingCard: React.FC<OfferingCardProps> = ({
       <div className="pt-3 border-t flex items-center justify-between gap-3">
         <div>
           <span className="text-[11px] text-[#78716c] uppercase block font-semibold">Tuition Escrow</span>
-          <span className="font-mono text-sm font-bold text-[#1c1917]">{feeFormatted} GEN</span>
+          <span className="font-mono text-sm font-bold text-[#1c1917]">{feeFormatted}</span>
         </div>
 
         {isEnrolled || isOrganizer ? (

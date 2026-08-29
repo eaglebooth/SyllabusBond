@@ -39,6 +39,7 @@ export type ContractResult = {
 };
 
 const STORAGE_KEY = "syllabusbond.contract";
+const STUDIONET_CHAIN_ID = `0x${studionet.id.toString(16)}`;
 
 export function configuredAddress(): string {
   if (typeof window !== "undefined") {
@@ -59,6 +60,29 @@ export function setConfiguredAddress(address: string) {
 export function restoreConfiguredAddress() {
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(STORAGE_KEY);
+  }
+}
+
+export const activeNetwork = () => network;
+export const explorerUrl = () => `https://explorer-studio.genlayer.com/address/${configuredAddress()}`;
+
+async function ensureWalletNetwork(): Promise<void> {
+  if (!window.ethereum || network !== "studionet") return;
+  try {
+    await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: STUDIONET_CHAIN_ID }] });
+  } catch (error) {
+    const code = Number((error as { code?: number })?.code);
+    if (code !== 4902 && code !== -32603) throw error;
+    await window.ethereum.request({
+      method: "wallet_addEthereumChain",
+      params: [{
+        chainId: STUDIONET_CHAIN_ID,
+        chainName: "GenLayer Studio Network",
+        nativeCurrency: { name: "GEN Token", symbol: "GEN", decimals: 18 },
+        rpcUrls: [endpoint || "https://studio.genlayer.com/api"],
+        blockExplorerUrls: ["https://explorer-studio.genlayer.com"],
+      }],
+    });
   }
 }
 
@@ -87,6 +111,7 @@ export async function connectWallet(): Promise<ContractResult> {
     return { success: false, error: "Please install or unlock an EVM browser wallet." };
   }
   try {
+    await ensureWalletNetwork();
     const accounts = (await window.ethereum.request({ method: "eth_requestAccounts", params: [] })) as string[];
     return accounts[0] ? { success: true, data: accounts[0] } : { success: false, error: "No wallet account selected." };
   } catch (error) {
@@ -107,6 +132,26 @@ export async function readContract(functionName: string, args: unknown[] = []): 
   }
 }
 
+export async function resolveCreatedOfferingId(
+  beforeCount: number,
+  organizer: string,
+  title: string,
+  courseId: string,
+): Promise<bigint | null> {
+  const counts = await readContract("get_counts");
+  const after = counts.success && counts.data ? Number((counts.data as { offering_count?: unknown }).offering_count) : NaN;
+  if (!Number.isInteger(after) || after <= beforeCount) return null;
+  for (let id = after - 1; id >= beforeCount; id -= 1) {
+    const result = await readContract("get_offering", [BigInt(id)]);
+    const offering = result.success && result.data ? result.data as { organizer?: string; title?: string; course_id?: string } : null;
+    if (
+      offering?.organizer?.toLowerCase() === organizer.toLowerCase() &&
+      offering.title === title &&
+      offering.course_id === courseId
+    ) return BigInt(id);
+  }
+  return null;
+}
 export async function writeContract(
   functionName: string,
   args: unknown[] = [],
@@ -122,6 +167,7 @@ export async function writeContract(
 
   let hash = "";
   try {
+    await ensureWalletNetwork();
     const accounts = (await window.ethereum.request({ method: "eth_requestAccounts", params: [] })) as string[];
     if (!accounts[0]) return { success: false, error: "No wallet account selected." };
 

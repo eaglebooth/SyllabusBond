@@ -70,7 +70,7 @@ When fetched in `adjudicate()`, the contract recalculates `sha256(raw_bytes)` an
 | **Material Reduction Split** | Organizer & Student | Create -> Enroll -> Deliver (partial) -> Adjudicate (`MATERIALLY_REDUCED`) -> Settle | State `SETTLED`, 50% to Organizer, 50% + rem to Student |
 | **Total Breach Refund** | Organizer & Student | Create -> Enroll -> Adjudicate (`NOT_DELIVERED`) -> Settle | State `SETTLED`, 100% refund to Student |
 | **Wrong Caller Enrollment** | Impersonator | Attempting to claim/modify another student's enrollment | Revert `STUDENT_ONLY` |
-| **Zero / Insufficient Value** | Student | Calling `enroll` with wrong wei value | Revert `EXACT_FEE_REQUIRED` |
+| **Zero / Insufficient Value** | Student | Calling `enroll` with wrong whole-GEN value | Revert `EXACT_FEE_REQUIRED` |
 | **Duplicate Enrollment** | Student | Enrolling twice in the same offering | Revert `ALREADY_ENROLLED` |
 | **Evidence Digest Reuse** | Attacker | Submitting previously used delivery/dispute digest | Revert `DIGEST_ALREADY_USED` |
 | **Early Adjudication** | Organizer | Calling `adjudicate` during active challenge window | Revert `CHALLENGE_WINDOW_ACTIVE` |

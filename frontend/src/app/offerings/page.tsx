@@ -10,14 +10,14 @@ import { connectWallet, readContract, configuredAddress } from "@/lib/genlayer";
 export default function OfferingsPage() {
   const [account, setAccount] = useState("");
   const [offerings, setOfferings] = useState<Offering[]>([]);
-  const [enrollments, setEnrollments] = useState<Record<number, Enrollment>>({});
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
   const activeAddress = configuredAddress();
 
   const fetchState = useCallback(async () => {
-    if (!activeAddress || activeAddress === "0x0000000000000000000000000000000000000000") return;
+    if (!activeAddress || activeAddress === "0x0000000000000000000000000000000000000000") return false;
     setIsRefreshing(true);
     try {
       const countsRes = await readContract("get_counts");
@@ -26,25 +26,27 @@ export default function OfferingsPage() {
         const offCount = counts.offering_count || 0;
         const enrCount = counts.enrollment_count || 0;
 
+        let complete = true;
         const fetchedOfferings: Offering[] = [];
         for (let i = 0; i < offCount; i++) {
           const offRes = await readContract("get_offering", [BigInt(i)]);
           if (offRes.success && offRes.data) fetchedOfferings.push(offRes.data as Offering);
+          else complete = false;
         }
         setOfferings(fetchedOfferings);
 
-        const fetchedEnrollments: Record<number, Enrollment> = {};
+        const fetchedEnrollments: Enrollment[] = [];
         for (let i = 0; i < enrCount; i++) {
           const enrRes = await readContract("get_enrollment", [BigInt(i)]);
-          if (enrRes.success && enrRes.data) {
-            const enr = enrRes.data as Enrollment;
-            fetchedEnrollments[enr.offering_id] = enr;
-          }
+          if (enrRes.success && enrRes.data) fetchedEnrollments.push(enrRes.data as Enrollment);
+          else complete = false;
         }
         setEnrollments(fetchedEnrollments);
+        return complete;
       }
+      return false;
     } catch {
-      // Clean catch
+      return false;
     } finally {
       setIsRefreshing(false);
     }
@@ -145,18 +147,21 @@ export default function OfferingsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filtered.map((offering) => (
-              <OfferingCard
+            {filtered.map((offering) => {
+              const ownEnrollment = enrollments.find(
+                (item) => item.offering_id === offering.id && item.student.toLowerCase() === account.toLowerCase(),
+              );
+              return <OfferingCard
                 key={offering.id}
                 offering={offering}
                 account={account}
-                isEnrolled={Boolean(enrollments[offering.id])}
+                isEnrolled={Boolean(ownEnrollment)}
                 onEnrolledSuccess={fetchState}
-                onSelectEnrollment={(id) => {
-                  window.location.href = `/workspace?id=${id}`;
+                onSelectEnrollment={() => {
+                  window.location.href = ownEnrollment ? `/workspace?id=${ownEnrollment.id}` : "/workspace";
                 }}
-              />
-            ))}
+              />;
+            })}
           </div>
         )}
       </main>
@@ -166,7 +171,7 @@ export default function OfferingsPage() {
           <div>
             <span className="font-serif font-bold text-[#1c1917]">SyllabusBond</span> — Course delivery escrow protocol
           </div>
-          <div className="font-mono text-[11px]">Status: LOCAL_ONLY</div>
+          <div className="font-mono text-[11px]">Status: LIVE · STUDIONET</div>
         </div>
       </footer>
     </div>

@@ -3,7 +3,8 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/Header";
-import { connectWallet, readContract, writeContract } from "@/lib/genlayer";
+import { connectWallet, readContract, resolveCreatedOfferingId, writeContract } from "@/lib/genlayer";
+import { parseGenInput } from "@/lib/amount";
 
 export default function CreateOfferingPage() {
   const [account, setAccount] = useState("");
@@ -62,13 +63,16 @@ export default function CreateOfferingPage() {
     setStatusMsg("Step 1/2: Submitting course terms to GenLayer contract...");
 
     try {
-      const feeWei = BigInt(Math.floor(parseFloat(feeEth) * 1e18));
+      const feeAmount = parseGenInput(feeEth);
       const durHours = BigInt(parseInt(durationHours, 10));
+      const beforeResult = await readContract("get_counts");
+      const beforeCount = beforeResult.success && beforeResult.data ? Number((beforeResult.data as { offering_count?: unknown }).offering_count) : NaN;
+      if (!Number.isInteger(beforeCount)) throw new Error("Could not read the offering counter before submission.");
 
       const res1 = await writeContract("create_offering", [
         title,
         courseId,
-        feeWei,
+        feeAmount,
         durHours,
         termsUrl,
         termsDigest,
@@ -80,27 +84,9 @@ export default function CreateOfferingPage() {
         return;
       }
 
-      // GenLayer receipts expose the contract return value on different runtime
-      // versions; use it when present and fall back to the post-write count.
-      const receipt = (res1.data ?? {}) as Record<string, unknown>;
-      let offeringId: bigint | null = null;
-      for (const key of ["returnData", "result", "returnValue", "data"]) {
-        const value = receipt[key];
-        if (typeof value === "number" || typeof value === "string" || typeof value === "bigint") {
-          try { offeringId = BigInt(value); break; } catch { /* try next representation */ }
-        }
-      }
+      const offeringId = await resolveCreatedOfferingId(beforeCount, account, title, courseId);
       if (offeringId === null) {
-        const counts = await readContract("get_counts", []);
-        const countData = (counts.data ?? {}) as Record<string, unknown>;
-        const count = countData.offering_count;
-        if (typeof count === "number" || typeof count === "string" || typeof count === "bigint") {
-          offeringId = BigInt(count) - BigInt(1);
-        }
-      }
-      if (offeringId === null || offeringId < BigInt(0)) {
-        setErrorMsg("Offering was accepted but its returned ID could not be resolved; refusing to guess an ID.");
-        setLoading(false);
+        setErrorMsg("Offering was accepted, but its ID could not be matched safely to this organizer and course.");
         return;
       }
       setCreatedId(offeringId);
@@ -114,6 +100,12 @@ export default function CreateOfferingPage() {
       ]);
 
       if (res2.success) {
+        const verified = await readContract("get_offering", [offeringId]);
+        const offering = verified.success ? verified.data as { id?: number; status?: string } : null;
+        if (!offering || Number(offering.id) !== Number(offeringId) || offering.status !== "OPEN") {
+          setErrorMsg("Transactions were accepted, but the OPEN offering could not be verified by read-back.");
+          return;
+        }
         setIsSuccess(true);
       } else {
         setErrorMsg(res2.error || "Failed to lock curriculum.");
@@ -424,7 +416,7 @@ export default function CreateOfferingPage() {
           <div>
             <span className="font-serif font-bold text-[#1c1917]">SyllabusBond</span> — Course delivery escrow protocol
           </div>
-          <div className="font-mono text-[11px]">Status: LOCAL_ONLY</div>
+          <div className="font-mono text-[11px]">Status: LIVE · STUDIONET</div>
         </div>
       </footer>
     </div>

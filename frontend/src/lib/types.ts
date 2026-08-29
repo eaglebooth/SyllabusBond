@@ -1,9 +1,11 @@
+import type { GenAmount } from "@/lib/amount";
+
 export type Offering = {
   id: number;
   organizer: string;
   title: string;
   course_id: string;
-  fee: number;
+  fee: GenAmount;
   duration_hours: number;
   terms_url: string;
   terms_digest: string;
@@ -16,7 +18,7 @@ export type Enrollment = {
   id: number;
   offering_id: number;
   student: string;
-  fee: number;
+  fee: GenAmount;
   status:
     | "FUNDED"
     | "CHALLENGE_WINDOW"
@@ -30,13 +32,13 @@ export type Enrollment = {
   curriculum_fidelity: "FULL" | "PARTIAL" | "BREACH" | "UNVERIFIED";
   instructor_fidelity: "MATCH" | "SUBSTITUTED" | "UNVERIFIED";
   reason: string;
-  organizer_paid: number;
-  student_refunded: number;
+  organizer_paid: GenAmount;
+  student_refunded: GenAmount;
 };
 
 export type ContractTotals = {
-  total_received: number;
-  total_held: number;
-  total_paid_to_organizers: number;
-  total_refunded_to_students: number;
+  total_received: GenAmount;
+  total_held: GenAmount;
+  total_paid_to_organizers: GenAmount;
+  total_refunded_to_students: GenAmount;
 };

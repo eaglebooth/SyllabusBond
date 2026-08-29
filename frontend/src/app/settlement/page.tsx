@@ -5,12 +5,13 @@ import Link from "next/link";
 import { Header } from "@/components/Header";
 import { Offering, Enrollment } from "@/lib/types";
 import { connectWallet, readContract, writeContract, configuredAddress } from "@/lib/genlayer";
+import { asGenBigInt, formatGen } from "@/lib/amount";
 
 export default function SettlementPage() {
   const [account, setAccount] = useState("");
   const [offerings, setOfferings] = useState<Offering[]>([]);
-  const [enrollments, setEnrollments] = useState<Record<number, Enrollment>>({});
-  const [selectedOfferingId, setSelectedOfferingId] = useState<number>(0);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<number>(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
@@ -18,7 +19,7 @@ export default function SettlementPage() {
   const activeAddress = configuredAddress();
 
   const fetchState = useCallback(async () => {
-    if (!activeAddress || activeAddress === "0x0000000000000000000000000000000000000000") return;
+    if (!activeAddress || activeAddress === "0x0000000000000000000000000000000000000000") return false;
     setIsRefreshing(true);
     try {
       const countsRes = await readContract("get_counts");
@@ -27,25 +28,27 @@ export default function SettlementPage() {
         const offCount = counts.offering_count || 0;
         const enrCount = counts.enrollment_count || 0;
 
+        let complete = true;
         const fetchedOfferings: Offering[] = [];
         for (let i = 0; i < offCount; i++) {
           const offRes = await readContract("get_offering", [BigInt(i)]);
           if (offRes.success && offRes.data) fetchedOfferings.push(offRes.data as Offering);
+          else complete = false;
         }
         setOfferings(fetchedOfferings);
 
-        const fetchedEnrollments: Record<number, Enrollment> = {};
+        const fetchedEnrollments: Enrollment[] = [];
         for (let i = 0; i < enrCount; i++) {
           const enrRes = await readContract("get_enrollment", [BigInt(i)]);
-          if (enrRes.success && enrRes.data) {
-            const enr = enrRes.data as Enrollment;
-            fetchedEnrollments[enr.offering_id] = enr;
-          }
+          if (enrRes.success && enrRes.data) fetchedEnrollments.push(enrRes.data as Enrollment);
+          else complete = false;
         }
         setEnrollments(fetchedEnrollments);
+        return complete;
       }
+      return false;
     } catch {
-      // Clean catch
+      return false;
     } finally {
       setIsRefreshing(false);
     }
@@ -63,8 +66,8 @@ export default function SettlementPage() {
     }
   };
 
-  const selectedOffering = offerings.find((o) => o.id === selectedOfferingId) || offerings[0];
-  const selectedEnrollment = selectedOffering ? enrollments[selectedOffering.id] : null;
+  const selectedEnrollment = enrollments.find((item) => item.id === selectedEnrollmentId) ?? enrollments[0] ?? null;
+  const selectedOffering = selectedEnrollment ? offerings.find((item) => item.id === selectedEnrollment.offering_id) ?? null : null;
 
   const handleSettle = async () => {
     if (!selectedEnrollment) return;
@@ -75,8 +78,9 @@ export default function SettlementPage() {
     try {
       const res = await writeContract("settle", [BigInt(selectedEnrollment.id)]);
       if (res.success) {
-        setStatusMsg("Settlement transfer completed.");
-        fetchState();
+        const verified = await fetchState();
+        if (verified) setStatusMsg("Settlement transfer completed and verified from contract state.");
+        else setErrorMsg("Settlement was accepted, but authoritative read-back failed.");
       } else {
         setErrorMsg(res.error || "Settlement execution failed.");
       }
@@ -96,8 +100,9 @@ export default function SettlementPage() {
     try {
       const res = await writeContract("claim_recovery", [BigInt(selectedEnrollment.id)]);
       if (res.success) {
-        setStatusMsg("Recovery split completed.");
-        fetchState();
+        const verified = await fetchState();
+        if (verified) setStatusMsg("Recovery split completed and verified from contract state.");
+        else setErrorMsg("Recovery was accepted, but authoritative read-back failed.");
       } else {
         setErrorMsg(res.error || "Recovery execution failed.");
       }
@@ -108,8 +113,8 @@ export default function SettlementPage() {
     }
   };
 
-  const feeWei = selectedEnrollment ? selectedEnrollment.fee : 0;
-  const feeEth = (feeWei / 1e18).toFixed(4);
+  const feeAmount = asGenBigInt(selectedEnrollment ? selectedEnrollment.fee : 0);
+  const feeLabel = formatGen(feeAmount);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#fbfaf7] text-[#1c1917]">
@@ -134,19 +139,20 @@ export default function SettlementPage() {
             </p>
           </div>
 
-          {offerings.length > 0 && (
+          {enrollments.length > 0 && (
             <div className="flex items-center gap-2">
               <label className="text-xs font-semibold text-[#78716c]">Case:</label>
               <select
-                value={selectedOfferingId}
-                onChange={(e) => setSelectedOfferingId(parseInt(e.target.value, 10))}
+                value={selectedEnrollmentId}
+                onChange={(e) => setSelectedEnrollmentId(parseInt(e.target.value, 10))}
                 className="input-academic text-xs"
               >
-                {offerings.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    #{o.id} - {o.title}
-                  </option>
-                ))}
+                {enrollments.map((enrollment) => {
+                  const offering = offerings.find((item) => item.id === enrollment.offering_id);
+                  return <option key={enrollment.id} value={enrollment.id}>
+                    Enrollment #{enrollment.id} - {offering?.title ?? `Offering #${enrollment.offering_id}`}
+                  </option>;
+                })}
               </select>
             </div>
           )}
@@ -175,7 +181,7 @@ export default function SettlementPage() {
               </div>
               <div className="text-right">
                 <span className="text-[11px] text-[#78716c] uppercase font-semibold block">Escrow Amount</span>
-                <span className="font-mono text-lg font-bold text-[#1e3a8a]">{feeEth} GEN</span>
+                <span className="font-mono text-lg font-bold text-[#1e3a8a]">{feeLabel}</span>
               </div>
             </div>
 
@@ -195,10 +201,10 @@ export default function SettlementPage() {
                     </span>
                     <p className="text-base font-bold font-mono text-[#166534]">
                       {selectedEnrollment.decision === "DELIVERED"
-                        ? `${feeEth} GEN (100%)`
+                        ? `${feeLabel} (100%)`
                         : selectedEnrollment.decision === "MATERIALLY_REDUCED"
-                        ? `${((feeWei / 2) / 1e18).toFixed(4)} GEN (50%)`
-                        : "0.0000 GEN (0%)"}
+                        ? `${formatGen(feeAmount / BigInt(2))} (50%)`
+                        : "0 GEN (0%)"}
                     </p>
                   </div>
 
@@ -208,10 +214,10 @@ export default function SettlementPage() {
                     </span>
                     <p className="text-base font-bold font-mono text-[#1e3a8a]">
                       {selectedEnrollment.decision === "NOT_DELIVERED"
-                        ? `${feeEth} GEN (100%)`
+                        ? `${feeLabel} (100%)`
                         : selectedEnrollment.decision === "MATERIALLY_REDUCED"
-                        ? `${((feeWei - Math.floor(feeWei / 2)) / 1e18).toFixed(4)} GEN (50% + rem)`
-                        : "0.0000 GEN (0%)"}
+                        ? `${formatGen(feeAmount - feeAmount / BigInt(2))} (50% + rem)`
+                        : "0 GEN (0%)"}
                     </p>
                   </div>
                 </div>
@@ -255,11 +261,11 @@ export default function SettlementPage() {
                 <div className="pt-3 border-t border-[#bbf7d0] grid grid-cols-2 gap-4 text-xs font-mono">
                   <div>
                     <span className="text-[#78716c] block text-[11px]">Paid to Organizer:</span>
-                    <span className="font-bold text-[#1c1917]">{(selectedEnrollment.organizer_paid / 1e18).toFixed(4)} GEN</span>
+                    <span className="font-bold text-[#1c1917]">{formatGen(selectedEnrollment.organizer_paid)}</span>
                   </div>
                   <div>
                     <span className="text-[#78716c] block text-[11px]">Refunded to Student:</span>
-                    <span className="font-bold text-[#1c1917]">{(selectedEnrollment.student_refunded / 1e18).toFixed(4)} GEN</span>
+                    <span className="font-bold text-[#1c1917]">{formatGen(selectedEnrollment.student_refunded)}</span>
                   </div>
                 </div>
               </div>
@@ -278,7 +284,7 @@ export default function SettlementPage() {
           <div>
             <span className="font-serif font-bold text-[#1c1917]">SyllabusBond</span> — Course delivery escrow protocol
           </div>
-          <div className="font-mono text-[11px]">Status: LOCAL_ONLY</div>
+          <div className="font-mono text-[11px]">Status: LIVE · STUDIONET</div>
         </div>
       </footer>
     </div>

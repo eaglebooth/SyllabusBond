@@ -2,9 +2,9 @@
 
 **Current Project Status**: `STUDIONET_DEPLOYED_AND_VERIFIED`  
 **Deployed Contract Target**: `0x85F77d08727Ca798875387E57736077258Be255D` (GenLayer Studionet, Chain 61999)  
-**Explorer**: [https://studio.genlayer.com/explorer/address/0x85F77d08727Ca798875387E57736077258Be255D](https://studio.genlayer.com/explorer/address/0x85F77d08727Ca798875387E57736077258Be255D)
+**Explorer**: [https://explorer-studio.genlayer.com/address/0x85F77d08727Ca798875387E57736077258Be255D](https://explorer-studio.genlayer.com/address/0x85F77d08727Ca798875387E57736077258Be255D)
 
-**Testnet timing profile**: delivery follows the committed duration; challenge and recovery windows are each 5 minutes for reproducible lifecycle evidence.
+**Deployed testnet timing profile**: the current contract stores the promised duration and uses 120/30/30-second delivery, challenge, and recovery windows for reproducible lifecycle evidence.
 
 | Gate / Feature | Status | Evidence Summary & Proof Location |
 |---|---|---|

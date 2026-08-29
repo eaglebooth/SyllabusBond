@@ -14,7 +14,7 @@ This matrix maps every quality standard and rule from `rules.md` and `ruleschat.
 | **Verdict Cross-Validation** | `_consistent_verdict()` rejects contradictory combinations | Displays normalized verdict tuple & reasoning | `test_contract_static.py::test_verdict_parser_consistency` | `BLOCKED` |
 | **Evidence Digest Verification** | Fetches raw bytes, recomputes SHA-256, compares with locked digest | Displays source URL, commitment digest, and match status | `test_production_contract_paths.py::test_digest_verification` | `BLOCKED` |
 | **Anti-Digest Reuse** | `digest_claim_index` tracking | Shows reusable/consumed warnings | `test_production_contract_paths.py::test_anti_reuse_protection` | `BLOCKED` |
-| **Deterministic 50/50 Remainder** | `organizer_amount = fee // 2`, `student_amount = fee - organizer_amount` | Explains wei remainder allocation in UI | `test_production_contract_paths.py::test_materially_reduced_remainder` | `BLOCKED` |
+| **Deterministic 50/50 Remainder** | `organizer_amount = fee // 2`, `student_amount = fee - organizer_amount` | Explains whole-GEN remainder allocation in UI | `test_production_contract_paths.py::test_materially_reduced_remainder` | `BLOCKED` |
 | **Bounded Non-Vetoable Recovery** | `claim_recovery()` after `recovery_deadline` | Recovery countdown & one-click trigger | `test_lifecycle_behavior.py::test_recovery_lifecycle` | `BLOCKED` |
 | **Adjudication vs Timeout Race** | Mutually exclusive states (`ADJUDICATED` vs `RECOVERY_WAIT` vs `RECOVERED`) | Prevents double actions | `test_lifecycle_behavior.py::test_race_condition_prevention` | `BLOCKED` |
 | **GenLayerJS Integration** | `genlayer-js` client connected to Studionet | `frontend/src/lib/genlayerClient.ts` | `frontend/` build & typecheck | `BLOCKED` |

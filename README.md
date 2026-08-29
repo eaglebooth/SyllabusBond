@@ -1,9 +1,21 @@
 # SyllabusBond — Decentralized Syllabus Delivery & Tuition Escrow
 
 > **Deployed Contract Target**: `0x85F77d08727Ca798875387E57736077258Be255D` (GenLayer Studionet, Chain 61999)  
-> **Explorer**: [https://studio.genlayer.com/explorer/address/0x85F77d08727Ca798875387E57736077258Be255D](https://studio.genlayer.com/explorer/address/0x85F77d08727Ca798875387E57736077258Be255D)
+> **Explorer**: [https://explorer-studio.genlayer.com/address/0x85F77d08727Ca798875387E57736077258Be255D](https://explorer-studio.genlayer.com/address/0x85F77d08727Ca798875387E57736077258Be255D)
 
-> **Testnet timing profile**: delivery uses the committed duration; challenge and recovery each use a bounded 5-minute window so the complete lifecycle can be reproduced on Studionet.
+> **Deployed testnet timing profile**: the current contract stores the promised duration and uses short 120/30/30-second delivery, challenge, and recovery windows for reproducible Studionet demonstrations.
+
+---
+
+## Current live application
+
+- Website: https://frontend-five-eta-88.vercel.app/
+- Network: GenLayer studionet (`Preview` in Project Explorer)
+- Contract: `0x85F77d08727Ca798875387E57736077258Be255D`
+- Explorer: https://explorer-studio.genlayer.com/address/0x85F77d08727Ca798875387E57736077258Be255D
+- Public proof: enrollment `#0` is `SETTLED / DELIVERED / FULL / MATCH`; the organizer received `1 GEN`.
+
+The landing page and verification ledger read counts, custody totals, and the latest enrollment directly from the deployed contract without requiring a wallet. Writes request the GenLayer Studio network and are followed by authoritative contract read-back before the UI claims updated state.
 
 ---
 
@@ -23,7 +35,7 @@ Traditional payment platforms force students into slow, adversarial chargeback d
 
 AI Jury issues a closed-band verdict:
 - `DELIVERED`: Full delivery conforming to commitments -> Organizer 100%, Student 0%.
-- `MATERIALLY_REDUCED`: Course delivered with significant omissions or unauthorized substitutions -> Organizer 50%, Student 50% (with any odd wei remainder deterministically refunded to the Student).
+- `MATERIALLY_REDUCED`: Course delivered with significant omissions or unauthorized substitutions -> Organizer 50%, Student 50% (with any odd-unit remainder deterministically refunded to the Student).
 - `NOT_DELIVERED`: Cancellation or total failure to deliver -> Organizer 0%, Student 100%.
 - `EVIDENCE_UNAVAILABLE`: Missing or corrupted sources -> Transitions to `RECOVERY_WAIT` with a role-balanced, non-vetoable fallback exit.
 

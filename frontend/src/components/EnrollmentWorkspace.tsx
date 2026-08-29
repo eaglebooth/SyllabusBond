@@ -4,12 +4,13 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { Offering, Enrollment } from "@/lib/types";
 import { writeContract } from "@/lib/genlayer";
+import { formatGen } from "@/lib/amount";
 
 type EnrollmentWorkspaceProps = {
   offering: Offering;
   enrollment: Enrollment;
   account: string;
-  onRefresh: () => void;
+  onRefresh: () => Promise<boolean>;
   onBack: () => void;
 };
 
@@ -35,7 +36,7 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
   const [disputeUrl, setDisputeUrl] = useState("");
   const [disputeDigest, setDisputeDigest] = useState("");
 
-  const feeFormatted = (enrollment.fee / 1e18).toFixed(4);
+  const feeFormatted = formatGen(enrollment.fee);
 
   const handleAction = async (fnName: string, args: unknown[] = [], val = BigInt(0)) => {
     setLoading(true);
@@ -47,8 +48,13 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
       const res = await writeContract(fnName, args, val);
       if (res.success) {
         if (res.hash) setLastTxHash(res.hash);
-        setStatusMsg("Transaction accepted on-chain. State updated.");
-        onRefresh();
+        setStatusMsg("Transaction accepted. Verifying authoritative state...");
+        const verified = await onRefresh();
+        if (!verified) {
+          setErrorMsg("Transaction was accepted, but authoritative read-back failed. Verify the transaction before continuing.");
+          return;
+        }
+        setStatusMsg("Transaction accepted and state read back from the contract.");
       } else {
         if (res.hash) setLastTxHash(res.hash);
         setErrorMsg(res.error || `Failed to execute ${fnName}.`);
@@ -124,7 +130,7 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
               Held in Escrow
             </span>
             <span className="font-mono text-xl font-bold text-[#1e3a8a]">
-              {feeFormatted} GEN
+              {feeFormatted}
             </span>
           </div>
         </div>
@@ -441,13 +447,13 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
                 <div>
                   <span className="text-[#78716c] block text-[11px]">Paid to Organizer:</span>
                   <span className="font-bold text-[#1c1917]">
-                    {(enrollment.organizer_paid / 1e18).toFixed(4)} GEN
+                    {formatGen(enrollment.organizer_paid)}
                   </span>
                 </div>
                 <div>
                   <span className="text-[#78716c] block text-[11px]">Refunded to Student:</span>
                   <span className="font-bold text-[#1c1917]">
-                    {(enrollment.student_refunded / 1e18).toFixed(4)} GEN
+                    {formatGen(enrollment.student_refunded)}
                   </span>
                 </div>
               </div>

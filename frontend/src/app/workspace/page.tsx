@@ -14,13 +14,13 @@ function WorkspaceContent() {
 
   const [account, setAccount] = useState("");
   const [offerings, setOfferings] = useState<Offering[]>([]);
-  const [enrollments, setEnrollments] = useState<Record<number, Enrollment>>({});
-  const [selectedOfferingId, setSelectedOfferingId] = useState<number | null>(initialId);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<number | null>(initialId);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const activeAddress = configuredAddress();
 
   const fetchState = useCallback(async () => {
-    if (!activeAddress || activeAddress === "0x0000000000000000000000000000000000000000") return;
+    if (!activeAddress || activeAddress === "0x0000000000000000000000000000000000000000") return false;
     setIsRefreshing(true);
     try {
       const countsRes = await readContract("get_counts");
@@ -29,33 +29,36 @@ function WorkspaceContent() {
         const offCount = counts.offering_count || 0;
         const enrCount = counts.enrollment_count || 0;
 
+        let complete = true;
         const fetchedOfferings: Offering[] = [];
         for (let i = 0; i < offCount; i++) {
           const offRes = await readContract("get_offering", [BigInt(i)]);
           if (offRes.success && offRes.data) fetchedOfferings.push(offRes.data as Offering);
+          else complete = false;
         }
         setOfferings(fetchedOfferings);
 
-        const fetchedEnrollments: Record<number, Enrollment> = {};
+        const fetchedEnrollments: Enrollment[] = [];
         for (let i = 0; i < enrCount; i++) {
           const enrRes = await readContract("get_enrollment", [BigInt(i)]);
-          if (enrRes.success && enrRes.data) {
-            const enr = enrRes.data as Enrollment;
-            fetchedEnrollments[enr.offering_id] = enr;
-          }
+          if (enrRes.success && enrRes.data) fetchedEnrollments.push(enrRes.data as Enrollment);
+          else complete = false;
         }
         setEnrollments(fetchedEnrollments);
 
-        if (selectedOfferingId === null && fetchedOfferings.length > 0) {
-          setSelectedOfferingId(fetchedOfferings[0].id);
+        if (selectedEnrollmentId === null && fetchedEnrollments.length > 0) {
+          const own = fetchedEnrollments.find((item) => item.student.toLowerCase() === account.toLowerCase());
+          setSelectedEnrollmentId((own ?? fetchedEnrollments[0]).id);
         }
+        return complete;
       }
+      return false;
     } catch {
-      // Clean catch
+      return false;
     } finally {
       setIsRefreshing(false);
     }
-  }, [selectedOfferingId, activeAddress]);
+  }, [selectedEnrollmentId, activeAddress, account]);
 
   useEffect(() => {
     fetchState();
@@ -69,8 +72,8 @@ function WorkspaceContent() {
     }
   };
 
-  const selectedOffering = selectedOfferingId !== null ? offerings.find((o) => o.id === selectedOfferingId) : null;
-  const selectedEnrollment = selectedOfferingId !== null ? enrollments[selectedOfferingId] : null;
+  const selectedEnrollment = selectedEnrollmentId !== null ? enrollments.find((item) => item.id === selectedEnrollmentId) ?? null : null;
+  const selectedOffering = selectedEnrollment ? offerings.find((item) => item.id === selectedEnrollment.offering_id) ?? null : null;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#fbfaf7] text-[#1c1917]">
@@ -95,19 +98,20 @@ function WorkspaceContent() {
             </p>
           </div>
 
-          {offerings.length > 0 && (
+          {enrollments.length > 0 && (
             <div className="flex items-center gap-2">
               <label className="text-xs font-semibold text-[#78716c]">Select Case:</label>
               <select
-                value={selectedOfferingId ?? ""}
-                onChange={(e) => setSelectedOfferingId(parseInt(e.target.value, 10))}
+                value={selectedEnrollmentId ?? ""}
+                onChange={(e) => setSelectedEnrollmentId(parseInt(e.target.value, 10))}
                 className="input-academic text-xs"
               >
-                {offerings.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    #{o.id} - {o.title}
-                  </option>
-                ))}
+                {enrollments.map((enrollment) => {
+                  const offering = offerings.find((item) => item.id === enrollment.offering_id);
+                  return <option key={enrollment.id} value={enrollment.id}>
+                    Enrollment #{enrollment.id} - {offering?.title ?? `Offering #${enrollment.offering_id}`}
+                  </option>;
+                })}
               </select>
             </div>
           )}
@@ -143,7 +147,7 @@ function WorkspaceContent() {
           <div>
             <span className="font-serif font-bold text-[#1c1917]">SyllabusBond</span> — Course delivery escrow protocol
           </div>
-          <div className="font-mono text-[11px]">Status: LOCAL_ONLY</div>
+          <div className="font-mono text-[11px]">Status: LIVE · STUDIONET</div>
         </div>
       </footer>
     </div>
