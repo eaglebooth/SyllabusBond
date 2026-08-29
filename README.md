@@ -9,7 +9,7 @@
 
 ## Current live application
 
-- Website: https://frontend-five-eta-88.vercel.app/
+- Website: https://syllabusbond.vercel.app/
 - Network: GenLayer studionet (`Preview` in Project Explorer)
 - Contract: `0x85F77d08727Ca798875387E57736077258Be255D`
 - Explorer: https://explorer-studio.genlayer.com/address/0x85F77d08727Ca798875387E57736077258Be255D
