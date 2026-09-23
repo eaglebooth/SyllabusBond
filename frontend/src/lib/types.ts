@@ -7,11 +7,24 @@ export type Offering = {
   course_id: string;
   fee: GenAmount;
   duration_hours: number;
+  delivery_deadline: number;
+  challenge_deadline: number;
+  recovery_deadline: number;
   terms_url: string;
   terms_digest: string;
   curriculum_digest: string;
   instructor: string;
   status: "AWAITING_CURRICULUM_LOCK" | "OPEN" | "CLOSED";
+};
+
+export type EnrollmentEvidence = {
+  id: number;
+  delivery_url: string;
+  delivery_digest: string;
+  dispute_url: string;
+  dispute_digest: string;
+  appeal_url: string;
+  appeal_digest: string;
 };
 
 export type Enrollment = {
@@ -24,6 +37,8 @@ export type Enrollment = {
     | "CHALLENGE_WINDOW"
     | "READY_FOR_REVIEW"
     | "ADJUDICATED"
+    | "APPEAL_PENDING"
+    | "APPEAL_RESOLVED"
     | "SETTLED"
     | "RECOVERY_WAIT"
     | "RECOVERED"
@@ -34,6 +49,12 @@ export type Enrollment = {
   reason: string;
   organizer_paid: GenAmount;
   student_refunded: GenAmount;
+  pre_appeal_decision: string;
+  appeal_appellant: string;
+  appeal_stake: GenAmount;
+  appeal_result: "NONE" | "PENDING" | "UPHELD" | "OVERTURNED" | "UNRESOLVED";
+  appeal_deadline: number;
+  appeal_recovery_deadline: number;
 };
 
 export type ContractTotals = {

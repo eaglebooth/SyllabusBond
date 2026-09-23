@@ -53,6 +53,15 @@ class SyllabusBond(gl.Contract):
     enrollment_organizer_paid: TreeMap[u256, u256]
     enrollment_student_refunded: TreeMap[u256, u256]
 
+    enrollment_pre_appeal_decision: TreeMap[u256, str]
+    enrollment_appeal_appellant: TreeMap[u256, str]
+    enrollment_appeal_url: TreeMap[u256, str]
+    enrollment_appeal_digest: TreeMap[u256, str]
+    enrollment_appeal_stake: TreeMap[u256, u256]
+    enrollment_appeal_result: TreeMap[u256, str]
+    enrollment_appeal_deadline: TreeMap[u256, u256]
+    enrollment_appeal_recovery_deadline: TreeMap[u256, u256]
+
     student_offering_index: TreeMap[str, u256]
     digest_claim_index: TreeMap[str, u256]
 
@@ -163,6 +172,27 @@ class SyllabusBond(gl.Contract):
         reason = str(data.get("reason", "No evidence-based rationale returned."))[:800]
         return (decision, curriculum, instructor, reason)
 
+    def _parse_appeal_verdict(self, result: typing.Any, original_decision: str) -> typing.Any:
+        if isinstance(result, str):
+            try:
+                data = json.loads(result)
+            except Exception:
+                return None
+        else:
+            data = result
+        if not isinstance(data, dict):
+            return None
+        appeal_result = str(data.get("appeal_result", "UNRESOLVED")).upper()
+        parsed = self._parse_verdict(data)
+        if parsed is None or appeal_result not in ("UPHELD", "OVERTURNED"):
+            return None
+        decision, curriculum, instructor, reason = parsed
+        if appeal_result == "UPHELD" and decision != original_decision:
+            return None
+        if appeal_result == "OVERTURNED" and decision == original_decision:
+            return None
+        return (appeal_result, decision, curriculum, instructor, reason)
+
     @gl.public.write
     def create_offering(
         self,
@@ -186,6 +216,9 @@ class SyllabusBond(gl.Contract):
             raise gl.vm.UserError("IMMUTABLE_TERMS_URL_REQUIRED")
         if not self._valid_digest(terms_digest):
             raise gl.vm.UserError("INVALID_TERMS_DIGEST")
+        clean_terms_digest = terms_digest.lower()
+        if self.digest_claim_index.get(clean_terms_digest, u256(0)) != u256(0):
+            raise gl.vm.UserError("DIGEST_ALREADY_USED")
 
         offering_id = self.offering_count
         now = self._now()
@@ -205,7 +238,8 @@ class SyllabusBond(gl.Contract):
         self.offering_challenge_deadline[offering_id] = challenge_deadline
         self.offering_recovery_deadline[offering_id] = recovery_deadline
         self.offering_terms_url[offering_id] = terms_url
-        self.offering_terms_digest[offering_id] = terms_digest.lower()
+        self.offering_terms_digest[offering_id] = clean_terms_digest
+        self.digest_claim_index[clean_terms_digest] = offering_id + u256(1)
         self.offering_curriculum_digest[offering_id] = ""
         self.offering_instructor[offering_id] = ""
         self.offering_status[offering_id] = "AWAITING_CURRICULUM_LOCK"
@@ -230,10 +264,14 @@ class SyllabusBond(gl.Contract):
             raise gl.vm.UserError("CURRICULUM_ALREADY_LOCKED")
         if not self._valid_digest(curriculum_digest):
             raise gl.vm.UserError("INVALID_CURRICULUM_DIGEST")
+        clean_curriculum_digest = curriculum_digest.lower()
+        if self.digest_claim_index.get(clean_curriculum_digest, u256(0)) != u256(0):
+            raise gl.vm.UserError("DIGEST_ALREADY_USED")
         if len(instructor) < 2 or len(instructor) > 80:
             raise gl.vm.UserError("INVALID_INSTRUCTOR")
 
-        self.offering_curriculum_digest[offering_id] = curriculum_digest.lower()
+        self.offering_curriculum_digest[offering_id] = clean_curriculum_digest
+        self.digest_claim_index[clean_curriculum_digest] = offering_id + u256(1)
         self.offering_instructor[offering_id] = instructor
         self.offering_status[offering_id] = "OPEN"
         return "OFFERING_OPEN"
@@ -275,6 +313,14 @@ class SyllabusBond(gl.Contract):
         self.enrollment_reason[enrollment_id] = "Enrollment funded; awaiting syllabus delivery evidence."
         self.enrollment_organizer_paid[enrollment_id] = u256(0)
         self.enrollment_student_refunded[enrollment_id] = u256(0)
+        self.enrollment_pre_appeal_decision[enrollment_id] = "NONE"
+        self.enrollment_appeal_appellant[enrollment_id] = ""
+        self.enrollment_appeal_url[enrollment_id] = ""
+        self.enrollment_appeal_digest[enrollment_id] = ""
+        self.enrollment_appeal_stake[enrollment_id] = u256(0)
+        self.enrollment_appeal_result[enrollment_id] = "NONE"
+        self.enrollment_appeal_deadline[enrollment_id] = u256(0)
+        self.enrollment_appeal_recovery_deadline[enrollment_id] = u256(0)
 
         self.student_offering_index[student_offering_key] = enrollment_id + u256(1)
         self.total_received = self.total_received + offering_fee
@@ -413,28 +459,27 @@ class SyllabusBond(gl.Contract):
         dispute_digest = self.enrollment_dispute_digest[enrollment_id]
 
         def evaluate() -> str:
-            def render_source(url: str, label: str, expected_digest: str) -> str:
+            def render_source(url: str, expected_digest: str) -> typing.Any:
                 if len(url) == 0:
-                    return label + "_NOT_PROVIDED\n"
+                    return ("NOT_PROVIDED", "")
                 try:
                     response = gl.nondet.web.get(url)
                     body = response.body
                     content = body.decode("utf-8")
                     if len(content) < 40:
-                        return label + "_UNAVAILABLE\n"
+                        return ("UNAVAILABLE", "")
                     actual_digest = self._sha256_digest(body)
                     if actual_digest.lower() != expected_digest.lower():
-                        return label + "_DIGEST_MISMATCH actual=" + actual_digest + "\n"
-                    return label + "_VERIFIED_DIGEST=" + actual_digest + "\n" + content[:2500] + "\n"
+                        return ("DIGEST_MISMATCH", "")
+                    return ("VERIFIED", content[:2500])
                 except Exception:
-                    return label + "_UNAVAILABLE\n"
+                    return ("UNAVAILABLE", "")
 
-            terms_content = render_source(terms_url, "TERMS", terms_digest)
-            delivery_content = render_source(delivery_url, "DELIVERY", delivery_digest)
-            dispute_content = render_source(dispute_url, "DISPUTE", dispute_digest)
+            terms_status, terms_content = render_source(terms_url, terms_digest)
+            delivery_status, delivery_content = render_source(delivery_url, delivery_digest)
+            dispute_status, dispute_content = render_source(dispute_url, dispute_digest)
 
-            all_sources = terms_content + delivery_content + dispute_content
-            if "_DIGEST_MISMATCH" in all_sources or "TERMS_UNAVAILABLE" in all_sources or "DELIVERY_UNAVAILABLE" in all_sources:
+            if terms_status != "VERIFIED" or delivery_status != "VERIFIED" or dispute_status == "DIGEST_MISMATCH":
                 return json.dumps({
                     "decision": "EVIDENCE_UNAVAILABLE",
                     "curriculum_fidelity": "UNVERIFIED",
@@ -503,20 +548,147 @@ A paying outcome and non-paying outcome are NEVER equivalent."""
             self.enrollment_status[enrollment_id] = "RECOVERY_WAIT"
         else:
             self.enrollment_status[enrollment_id] = "ADJUDICATED"
+            self.enrollment_appeal_deadline[enrollment_id] = self._now() + u256(60)
 
         return self.enrollment_status[enrollment_id]
+
+    @gl.public.write.payable
+    def open_appeal(self, enrollment_id: u256, appeal_url: str, appeal_digest: str) -> str:
+        if enrollment_id >= self.enrollment_count:
+            raise gl.vm.UserError("ENROLLMENT_NOT_FOUND")
+        if self.enrollment_status[enrollment_id] != "ADJUDICATED":
+            raise gl.vm.UserError("VERDICT_NOT_APPEALABLE")
+        if self._timing_available() and self._now() > self.enrollment_appeal_deadline[enrollment_id]:
+            raise gl.vm.UserError("APPEAL_WINDOW_CLOSED")
+        offering_id = self.enrollment_offering[enrollment_id]
+        sender = gl.message.sender_address.as_hex.lower()
+        organizer = self.offering_organizer[offering_id]
+        student = self.enrollment_student[enrollment_id]
+        if sender != organizer and sender != student:
+            raise gl.vm.UserError("PARTY_ONLY")
+        if not self._valid_immutable_url(appeal_url):
+            raise gl.vm.UserError("IMMUTABLE_APPEAL_URL_REQUIRED")
+        if not self._valid_digest(appeal_digest):
+            raise gl.vm.UserError("INVALID_APPEAL_DIGEST")
+        clean_digest = appeal_digest.lower()
+        if self.digest_claim_index.get(clean_digest, u256(0)) != u256(0):
+            raise gl.vm.UserError("DIGEST_ALREADY_USED")
+
+        fee = self.enrollment_fee[enrollment_id]
+        required_stake = (fee + u256(9)) // u256(10)
+        if gl.message.value != required_stake:
+            raise gl.vm.UserError("EXACT_APPEAL_STAKE_REQUIRED")
+
+        self.enrollment_pre_appeal_decision[enrollment_id] = self.enrollment_decision[enrollment_id]
+        self.enrollment_appeal_appellant[enrollment_id] = sender
+        self.enrollment_appeal_url[enrollment_id] = appeal_url
+        self.enrollment_appeal_digest[enrollment_id] = clean_digest
+        self.enrollment_appeal_stake[enrollment_id] = required_stake
+        self.enrollment_appeal_result[enrollment_id] = "PENDING"
+        now = self._now()
+        self.enrollment_appeal_recovery_deadline[enrollment_id] = now + u256(120)
+        self.digest_claim_index[clean_digest] = enrollment_id + u256(1)
+        self.enrollment_status[enrollment_id] = "APPEAL_PENDING"
+        self.enrollment_reason[enrollment_id] = "Stake-backed appeal opened; awaiting GenLayer re-adjudication."
+        self.total_received = self.total_received + required_stake
+        self.total_held = self.total_held + required_stake
+        return "APPEAL_PENDING"
+
+    @gl.public.write
+    def adjudicate_appeal(self, enrollment_id: u256) -> str:
+        if enrollment_id >= self.enrollment_count:
+            raise gl.vm.UserError("ENROLLMENT_NOT_FOUND")
+        if self.enrollment_status[enrollment_id] != "APPEAL_PENDING":
+            raise gl.vm.UserError("NO_PENDING_APPEAL")
+
+        offering_id = self.enrollment_offering[enrollment_id]
+        if self._timing_available() and self._now() > self.enrollment_appeal_recovery_deadline[enrollment_id]:
+            raise gl.vm.UserError("APPEAL_REVIEW_WINDOW_CLOSED")
+        original_decision = self.enrollment_pre_appeal_decision[enrollment_id]
+        appeal_url = self.enrollment_appeal_url[enrollment_id]
+        appeal_digest = self.enrollment_appeal_digest[enrollment_id]
+        terms_url = self.offering_terms_url[offering_id]
+        terms_digest = self.offering_terms_digest[offering_id]
+        delivery_url = self.enrollment_delivery_url[enrollment_id]
+        delivery_digest = self.enrollment_delivery_digest[enrollment_id]
+        dispute_url = self.enrollment_dispute_url[enrollment_id]
+        dispute_digest = self.enrollment_dispute_digest[enrollment_id]
+
+        def evaluate_appeal() -> str:
+            def verified_source(url: str, expected_digest: str) -> typing.Any:
+                if len(url) == 0:
+                    return ("NOT_PROVIDED", "")
+                try:
+                    response = gl.nondet.web.get(url)
+                    body = response.body
+                    actual_digest = self._sha256_digest(body)
+                    if actual_digest.lower() != expected_digest.lower():
+                        return ("DIGEST_MISMATCH", "")
+                    return ("VERIFIED", body.decode("utf-8")[:2200])
+                except Exception:
+                    return ("UNAVAILABLE", "")
+
+            terms_status, terms_content = verified_source(terms_url, terms_digest)
+            delivery_status, delivery_content = verified_source(delivery_url, delivery_digest)
+            dispute_status, dispute_content = verified_source(dispute_url, dispute_digest)
+            appeal_status, appeal_content = verified_source(appeal_url, appeal_digest)
+            if terms_status != "VERIFIED" or delivery_status != "VERIFIED" or appeal_status != "VERIFIED" or dispute_status == "DIGEST_MISMATCH":
+                return json.dumps({"appeal_result":"UNRESOLVED","decision":"EVIDENCE_UNAVAILABLE","curriculum_fidelity":"UNVERIFIED","instructor_fidelity":"UNVERIFIED","reason":"Required appeal evidence was unavailable or failed digest verification."}, sort_keys=True, separators=(",", ":"))
+
+            sources = "TERMS:\n" + terms_content + "\nDELIVERY:\n" + delivery_content + "\nDISPUTE:\n" + dispute_content + "\nAPPEAL:\n" + appeal_content
+
+            prompt = f"""You are the GenLayer SyllabusBond appeal jury.
+Re-evaluate the original ruling using the complete verified record and the newly staked appeal packet.
+ORIGINAL DECISION: {original_decision}
+COMMITTED INSTRUCTOR: {self.offering_instructor[offering_id]}
+COMMITTED DURATION HOURS: {self.offering_duration_hours[offering_id]}
+
+--- VERIFIED RECORD ---
+{sources}
+
+Return valid JSON only:
+{{"appeal_result":"UPHELD|OVERTURNED","decision":"DELIVERED|MATERIALLY_REDUCED|NOT_DELIVERED","curriculum_fidelity":"FULL|PARTIAL|BREACH","instructor_fidelity":"MATCH|SUBSTITUTED|UNVERIFIED","reason":"Evidence-based reason under 600 characters"}}
+UPHELD means the decision is unchanged. OVERTURNED means the decision changed."""
+            return gl.nondet.exec_prompt(prompt)
+
+        principle = """Equivalent appeal outputs must agree exactly on appeal_result, decision, curriculum_fidelity, and instructor_fidelity. UPHELD and OVERTURNED are never equivalent. Different economic decision bands are never equivalent."""
+        parsed = self._parse_appeal_verdict(
+            gl.eq_principle.prompt_comparative(evaluate_appeal, principle),
+            original_decision,
+        )
+
+        if parsed is None:
+            self.enrollment_status[enrollment_id] = "RECOVERY_WAIT"
+            self.enrollment_decision[enrollment_id] = "EVIDENCE_UNAVAILABLE"
+            self.enrollment_appeal_result[enrollment_id] = "UNRESOLVED"
+            self.enrollment_reason[enrollment_id] = "Appeal consensus failed safely; entered bounded recovery."
+            return "RECOVERY_WAIT"
+
+        appeal_result, decision, curriculum, instructor_fid, reason = parsed
+
+        self.enrollment_decision[enrollment_id] = decision
+        self.enrollment_curriculum_fidelity[enrollment_id] = curriculum
+        self.enrollment_instructor_fidelity[enrollment_id] = instructor_fid
+        self.enrollment_appeal_result[enrollment_id] = appeal_result
+        self.enrollment_reason[enrollment_id] = reason
+        self.enrollment_status[enrollment_id] = "APPEAL_RESOLVED"
+        return "APPEAL_RESOLVED"
 
     @gl.public.write
     def settle(self, enrollment_id: u256) -> str:
         if enrollment_id >= self.enrollment_count:
             raise gl.vm.UserError("ENROLLMENT_NOT_FOUND")
-        if self.enrollment_status[enrollment_id] != "ADJUDICATED":
+        status = self.enrollment_status[enrollment_id]
+        if status not in ("ADJUDICATED", "APPEAL_RESOLVED"):
             raise gl.vm.UserError("NOT_READY_FOR_SETTLEMENT")
+        if status == "ADJUDICATED" and self._timing_available() and self._now() < self.enrollment_appeal_deadline[enrollment_id]:
+            raise gl.vm.UserError("APPEAL_WINDOW_ACTIVE")
 
         offering_id = self.enrollment_offering[enrollment_id]
         organizer = self.offering_organizer[offering_id]
         student = self.enrollment_student[enrollment_id]
         fee = self.enrollment_fee[enrollment_id]
+        appeal_stake = self.enrollment_appeal_stake.get(enrollment_id, u256(0))
 
         decision = self.enrollment_decision[enrollment_id]
         if not self._consistent_verdict(
@@ -541,15 +713,32 @@ A paying outcome and non-paying outcome are NEVER equivalent."""
         else:
             raise gl.vm.UserError("INVALID_SETTLEMENT_STATE")
 
-        if organizer_payout + student_refund != fee:
+        if appeal_stake > u256(0):
+            appellant = self.enrollment_appeal_appellant[enrollment_id]
+            appeal_result = self.enrollment_appeal_result[enrollment_id]
+            if appeal_result == "OVERTURNED":
+                if appellant == organizer:
+                    organizer_payout = organizer_payout + appeal_stake
+                else:
+                    student_refund = student_refund + appeal_stake
+            elif appeal_result == "UPHELD":
+                if appellant == organizer:
+                    student_refund = student_refund + appeal_stake
+                else:
+                    organizer_payout = organizer_payout + appeal_stake
+            else:
+                raise gl.vm.UserError("APPEAL_NOT_RESOLVED")
+
+        total_case_value = fee + appeal_stake
+        if organizer_payout + student_refund != total_case_value:
             raise gl.vm.UserError("CONSERVATION_INVARIANT_BROKEN")
-        if fee > self.total_held or fee > self.balance:
+        if total_case_value > self.total_held or total_case_value > self.balance:
             raise gl.vm.UserError("HELD_FUNDS_INSUFFICIENT")
 
         self.enrollment_organizer_paid[enrollment_id] = organizer_payout
         self.enrollment_student_refunded[enrollment_id] = student_refund
         self.enrollment_status[enrollment_id] = "SETTLED"
-        self.total_held = self.total_held - fee
+        self.total_held = self.total_held - total_case_value
         self.total_paid_to_organizers = self.total_paid_to_organizers + organizer_payout
         self.total_refunded_to_students = self.total_refunded_to_students + student_refund
 
@@ -564,7 +753,8 @@ A paying outcome and non-paying outcome are NEVER equivalent."""
     def claim_recovery(self, enrollment_id: u256) -> str:
         if enrollment_id >= self.enrollment_count:
             raise gl.vm.UserError("ENROLLMENT_NOT_FOUND")
-        if self.enrollment_status[enrollment_id] != "RECOVERY_WAIT":
+        status = self.enrollment_status[enrollment_id]
+        if status not in ("RECOVERY_WAIT", "APPEAL_PENDING"):
             raise gl.vm.UserError("NOT_IN_RECOVERY_STATE")
 
         sender = gl.message.sender_address.as_hex.lower()
@@ -574,22 +764,32 @@ A paying outcome and non-paying outcome are NEVER equivalent."""
 
         if sender != organizer and sender != student:
             raise gl.vm.UserError("PARTY_ONLY")
-        if self._timing_available() and self._now() < self.offering_recovery_deadline[offering_id]:
+        recovery_deadline = self.offering_recovery_deadline[offering_id]
+        if self.enrollment_appeal_stake.get(enrollment_id, u256(0)) > u256(0):
+            recovery_deadline = self.enrollment_appeal_recovery_deadline[enrollment_id]
+        if self._timing_available() and self._now() < recovery_deadline:
             raise gl.vm.UserError("RECOVERY_WINDOW_ACTIVE")
 
         fee = self.enrollment_fee[enrollment_id]
-        if fee > self.total_held or fee > self.balance:
+        appeal_stake = self.enrollment_appeal_stake.get(enrollment_id, u256(0))
+        total_case_value = fee + appeal_stake
+        if total_case_value > self.total_held or total_case_value > self.balance:
             raise gl.vm.UserError("HELD_FUNDS_INSUFFICIENT")
 
         organizer_payout = fee // u256(2)
         student_refund = fee - organizer_payout
+        if appeal_stake > u256(0):
+            if self.enrollment_appeal_appellant[enrollment_id] == organizer:
+                organizer_payout = organizer_payout + appeal_stake
+            else:
+                student_refund = student_refund + appeal_stake
 
         self.enrollment_organizer_paid[enrollment_id] = organizer_payout
         self.enrollment_student_refunded[enrollment_id] = student_refund
         self.enrollment_status[enrollment_id] = "RECOVERED"
         self.enrollment_decision[enrollment_id] = "RECOVERED"
         self.enrollment_reason[enrollment_id] = "Recovery split executed deterministically following unresolvable evidence."
-        self.total_held = self.total_held - fee
+        self.total_held = self.total_held - total_case_value
         self.total_paid_to_organizers = self.total_paid_to_organizers + organizer_payout
         self.total_refunded_to_students = self.total_refunded_to_students + student_refund
 
@@ -647,6 +847,12 @@ A paying outcome and non-paying outcome are NEVER equivalent."""
             "reason": self.enrollment_reason[enrollment_id],
             "organizer_paid": int(self.enrollment_organizer_paid[enrollment_id]),
             "student_refunded": int(self.enrollment_student_refunded[enrollment_id]),
+            "pre_appeal_decision": self.enrollment_pre_appeal_decision.get(enrollment_id, "NONE"),
+            "appeal_appellant": self.enrollment_appeal_appellant.get(enrollment_id, ""),
+            "appeal_stake": int(self.enrollment_appeal_stake.get(enrollment_id, u256(0))),
+            "appeal_result": self.enrollment_appeal_result.get(enrollment_id, "NONE"),
+            "appeal_deadline": int(self.enrollment_appeal_deadline.get(enrollment_id, u256(0))),
+            "appeal_recovery_deadline": int(self.enrollment_appeal_recovery_deadline.get(enrollment_id, u256(0))),
         }
 
     @gl.public.view
@@ -659,6 +865,8 @@ A paying outcome and non-paying outcome are NEVER equivalent."""
             "delivery_digest": self.enrollment_delivery_digest[enrollment_id],
             "dispute_url": self.enrollment_dispute_url[enrollment_id],
             "dispute_digest": self.enrollment_dispute_digest[enrollment_id],
+            "appeal_url": self.enrollment_appeal_url.get(enrollment_id, ""),
+            "appeal_digest": self.enrollment_appeal_digest.get(enrollment_id, ""),
         }
 
     @gl.public.view

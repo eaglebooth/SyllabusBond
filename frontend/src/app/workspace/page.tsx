@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { EnrollmentWorkspace } from "@/components/EnrollmentWorkspace";
-import { Offering, Enrollment } from "@/lib/types";
+import { Offering, Enrollment, EnrollmentEvidence } from "@/lib/types";
 import { connectWallet, readContract, configuredAddress } from "@/lib/genlayer";
 
 function WorkspaceContent() {
@@ -15,6 +15,7 @@ function WorkspaceContent() {
   const [account, setAccount] = useState("");
   const [offerings, setOfferings] = useState<Offering[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [evidenceByEnrollment, setEvidenceByEnrollment] = useState<Record<number, EnrollmentEvidence>>({});
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<number | null>(initialId);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const activeAddress = configuredAddress();
@@ -39,12 +40,17 @@ function WorkspaceContent() {
         setOfferings(fetchedOfferings);
 
         const fetchedEnrollments: Enrollment[] = [];
+        const fetchedEvidence: Record<number, EnrollmentEvidence> = {};
         for (let i = 0; i < enrCount; i++) {
           const enrRes = await readContract("get_enrollment", [BigInt(i)]);
           if (enrRes.success && enrRes.data) fetchedEnrollments.push(enrRes.data as Enrollment);
           else complete = false;
+          const evidenceRes = await readContract("get_enrollment_evidence", [BigInt(i)]);
+          if (evidenceRes.success && evidenceRes.data) fetchedEvidence[i] = evidenceRes.data as EnrollmentEvidence;
+          else complete = false;
         }
         setEnrollments(fetchedEnrollments);
+        setEvidenceByEnrollment(fetchedEvidence);
 
         if (selectedEnrollmentId === null && fetchedEnrollments.length > 0) {
           const own = fetchedEnrollments.find((item) => item.student.toLowerCase() === account.toLowerCase());
@@ -121,6 +127,7 @@ function WorkspaceContent() {
           <EnrollmentWorkspace
             offering={selectedOffering}
             enrollment={selectedEnrollment}
+            evidence={evidenceByEnrollment[selectedEnrollment.id] ?? null}
             account={account}
             onRefresh={fetchState}
             onBack={() => {

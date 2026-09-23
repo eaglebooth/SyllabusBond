@@ -1,14 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Offering, Enrollment } from "@/lib/types";
-import { writeContract } from "@/lib/genlayer";
-import { formatGen } from "@/lib/amount";
+import { Offering, Enrollment, EnrollmentEvidence } from "@/lib/types";
+import { transactionExplorerUrl, writeContract } from "@/lib/genlayer";
+import { asGenBigInt, formatGen } from "@/lib/amount";
+import { EvidenceIntegrityConsole } from "@/components/EvidenceIntegrityConsole";
 
 type EnrollmentWorkspaceProps = {
   offering: Offering;
   enrollment: Enrollment;
+  evidence: EnrollmentEvidence | null;
   account: string;
   onRefresh: () => Promise<boolean>;
   onBack: () => void;
@@ -17,6 +19,7 @@ type EnrollmentWorkspaceProps = {
 export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
   offering,
   enrollment,
+  evidence,
   account,
   onRefresh,
   onBack,
@@ -28,6 +31,12 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
   const [errorMsg, setErrorMsg] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
   const [lastTxHash, setLastTxHash] = useState("");
+  const [nowSeconds, setNowSeconds] = useState(() => Math.floor(Date.now() / 1000));
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowSeconds(Math.floor(Date.now() / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Evidence Inputs - Clear, clean empty defaults with valid placeholders
   const [deliveryUrl, setDeliveryUrl] = useState("");
@@ -35,8 +44,21 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
 
   const [disputeUrl, setDisputeUrl] = useState("");
   const [disputeDigest, setDisputeDigest] = useState("");
+  const [appealUrl, setAppealUrl] = useState("");
+  const [appealDigest, setAppealDigest] = useState("");
 
   const feeFormatted = formatGen(enrollment.fee);
+  const challengeDue = nowSeconds >= offering.challenge_deadline;
+  const effectiveRecoveryDeadline = asGenBigInt(enrollment.appeal_stake) > BigInt(0)
+    ? enrollment.appeal_recovery_deadline
+    : offering.recovery_deadline;
+  const recoveryDue = nowSeconds >= effectiveRecoveryDeadline;
+  const appealWindowOpen = enrollment.appeal_deadline > 0 && nowSeconds <= enrollment.appeal_deadline;
+  const deliveryOpen = nowSeconds <= offering.delivery_deadline;
+  const appealStake = (() => {
+    return (asGenBigInt(enrollment.fee) + BigInt(9)) / BigInt(10);
+  })();
+  const txExplorerUrl = lastTxHash ? transactionExplorerUrl(lastTxHash) : "";
 
   const handleAction = async (fnName: string, args: unknown[] = [], val = BigInt(0)) => {
     setLoading(true);
@@ -81,6 +103,8 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
       case "CHALLENGE_WINDOW": return 1;
       case "READY_FOR_REVIEW": return 2;
       case "ADJUDICATED": return 3;
+      case "APPEAL_PENDING": return 3;
+      case "APPEAL_RESOLVED": return 3;
       case "RECOVERY_WAIT": return 3;
       case "SETTLED":
       case "RECOVERED":
@@ -198,14 +222,14 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
         <div className="notice-danger space-y-1">
           <strong className="font-semibold block">Action Error</strong>
           <p>{errorMsg}</p>
-          {lastTxHash && <span className="font-mono text-[11px] block mt-1">Tx: {lastTxHash}</span>}
+          {lastTxHash && <a href={txExplorerUrl} target="_blank" rel="noreferrer" className="font-mono text-[11px] block mt-1 underline">Inspect transaction: {lastTxHash}</a>}
         </div>
       )}
 
       {statusMsg && !errorMsg && (
         <div className="notice-info space-y-1">
           <p className="font-mono text-xs">{statusMsg}</p>
-          {lastTxHash && <span className="font-mono text-[11px] block text-[#1e3a8a]">Tx ID: {lastTxHash}</span>}
+          {lastTxHash && <a href={txExplorerUrl} target="_blank" rel="noreferrer" className="font-mono text-[11px] block text-[#1e3a8a] underline">Inspect transaction: {lastTxHash}</a>}
         </div>
       )}
 
@@ -263,10 +287,10 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
                         deliveryDigest,
                       ])
                     }
-                    disabled={loading || !deliveryUrl || !deliveryDigest}
+                    disabled={loading || !deliveryOpen || !deliveryUrl || !deliveryDigest}
                     className="btn-academic text-xs w-full mt-2"
                   >
-                    {loading ? "Submitting Evidence..." : "Submit Delivery Evidence & Open Challenge"}
+                    {loading ? "Submitting Evidence..." : !deliveryOpen ? "Delivery deadline has passed" : "Submit Delivery Evidence & Open Challenge"}
                   </button>
                 </div>
               ) : isStudent ? (
@@ -345,10 +369,10 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
 
                     <button
                       onClick={() => handleAction("confirm_ready_for_review", [BigInt(enrollment.id)])}
-                      disabled={loading}
+                      disabled={loading || !challengeDue}
                       className="btn-academic text-xs"
                     >
-                      Accept Proof & Send to Review
+                      {challengeDue ? "Accept Proof & Send to Review" : "Available after challenge deadline"}
                     </button>
                   </div>
                 </div>
@@ -359,10 +383,10 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
                   </p>
                   <button
                     onClick={() => handleAction("confirm_ready_for_review", [BigInt(enrollment.id)])}
-                    disabled={loading}
+                    disabled={loading || !challengeDue}
                     className="btn-academic text-xs w-full"
                   >
-                    Conclude Challenge & Mark Ready for Review
+                    {challengeDue ? "Conclude Challenge & Mark Ready for Review" : "Challenge window is still active"}
                   </button>
                 </div>
               ) : (
@@ -380,10 +404,10 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
 
               <button
                 onClick={() => handleAction("adjudicate", [BigInt(enrollment.id)])}
-                disabled={loading}
+                disabled={loading || !challengeDue}
                 className="btn-academic text-xs w-full py-3"
               >
-                {loading ? "Deliberating On-Chain..." : "Trigger GenLayer AI Consensus Deliberation"}
+                {loading ? "Deliberating On-Chain..." : !challengeDue ? "Available after challenge deadline" : "Trigger GenLayer AI Consensus Deliberation"}
               </button>
             </div>
           )}
@@ -403,13 +427,54 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
                 </div>
               </div>
 
-              <button
-                onClick={() => handleAction("settle", [BigInt(enrollment.id)])}
-                disabled={loading}
-                className="btn-academic text-xs w-full py-3"
-              >
-                {loading ? "Settling..." : "Execute Escrow Settlement Transfer"}
+              {(isOrganizer || isStudent) && (
+                <div className="rounded-lg border border-violet-200 bg-violet-50 p-4 space-y-3">
+                  <div>
+                    <strong className="text-xs text-violet-950">Challenge the ruling with a stake-backed appeal</strong>
+                    <p className="mt-1 text-[11px] text-violet-800">Stake: 10% of tuition, rounded up ({formatGen(appealStake)}). An overturned appeal returns it; an upheld appeal awards it to the counterparty. Window: {appealWindowOpen ? new Date(enrollment.appeal_deadline * 1000).toLocaleString() : "closed"}.</p>
+                  </div>
+                  <input value={appealUrl} onChange={(event) => setAppealUrl(event.target.value)} placeholder="Immutable appeal evidence URL" className="input-academic font-mono text-xs" />
+                  <input value={appealDigest} onChange={(event) => setAppealDigest(event.target.value)} placeholder="sha256:..." className="input-academic font-mono text-xs" />
+                  <button
+                    onClick={() => handleAction("open_appeal", [BigInt(enrollment.id), appealUrl, appealDigest], appealStake)}
+                    disabled={loading || !appealWindowOpen || !appealUrl || !appealDigest}
+                    className="btn-secondary text-xs w-full"
+                  >
+                    {appealWindowOpen ? "Open Appeal & Lock Stake" : "Appeal window closed"}
+                  </button>
+                </div>
+              )}
+              <button onClick={() => handleAction("settle", [BigInt(enrollment.id)])} disabled={loading || appealWindowOpen} className="btn-academic text-xs w-full py-3">
+                {loading ? "Settling..." : appealWindowOpen ? "Settlement unlocks after appeal window" : "Accept Verdict & Execute Settlement"}
               </button>
+            </div>
+          )}
+
+          {enrollment.status === "APPEAL_PENDING" && (
+            <div className="space-y-4">
+              <div className="notice-warning">
+                <strong>Appeal evidence and stake are locked</strong>
+                <p className="text-xs mt-1">Trigger a fresh GenLayer consensus round over the complete record. The original verdict cannot settle while this appeal is pending.</p>
+              </div>
+              {recoveryDue ? (
+                <button onClick={() => handleAction("claim_recovery", [BigInt(enrollment.id)])} disabled={loading} className="btn-academic text-xs w-full py-3">Recover Timed-Out Appeal</button>
+              ) : (
+                <button onClick={() => handleAction("adjudicate_appeal", [BigInt(enrollment.id)])} disabled={loading} className="btn-academic text-xs w-full py-3">
+                  {loading ? "Re-adjudicating…" : "Trigger Appeal Re-adjudication"}
+                </button>
+              )}
+            </div>
+          )}
+
+          {enrollment.status === "APPEAL_RESOLVED" && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-[#e7e1d4] bg-[#f6f3eb] p-4 text-xs space-y-2">
+                <div className="flex justify-between gap-3"><span>Appeal result</span><strong>{enrollment.appeal_result}</strong></div>
+                <div className="flex justify-between gap-3"><span>Original verdict</span><strong>{enrollment.pre_appeal_decision}</strong></div>
+                <div className="flex justify-between gap-3"><span>Final verdict</span><strong>{enrollment.decision}</strong></div>
+                <div className="flex justify-between gap-3"><span>Appeal stake</span><strong>{formatGen(enrollment.appeal_stake)}</strong></div>
+              </div>
+              <button onClick={() => handleAction("settle", [BigInt(enrollment.id)])} disabled={loading} className="btn-academic text-xs w-full py-3">Execute Appeal-Aware Settlement</button>
             </div>
           )}
 
@@ -419,16 +484,16 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
               <div className="notice-warning">
                 <strong>Recovery Mode Active</strong>
                 <p className="text-xs mt-0.5">
-                  Evidence was unavailable or failed verification. Either party can trigger the non-vetoable 50/50 recovery split.
+                  Evidence was unavailable or failed verification. Either party can trigger the non-vetoable recovery split after {new Date(effectiveRecoveryDeadline * 1000).toLocaleString()}.
                 </p>
               </div>
 
               <button
                 onClick={() => handleAction("claim_recovery", [BigInt(enrollment.id)])}
-                disabled={loading}
+                disabled={loading || !recoveryDue}
                 className="btn-academic text-xs w-full"
               >
-                Execute 50/50 Recovery Split
+                {recoveryDue ? "Execute 50/50 Recovery Split" : "Available after recovery deadline"}
               </button>
             </div>
           )}
@@ -495,6 +560,8 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
           </div>
         </div>
       </div>
+
+      <EvidenceIntegrityConsole offering={offering} evidence={evidence} nowSeconds={nowSeconds} />
     </div>
   );
 };

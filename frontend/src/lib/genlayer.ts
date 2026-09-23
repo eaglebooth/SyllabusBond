@@ -65,6 +65,7 @@ export function restoreConfiguredAddress() {
 
 export const activeNetwork = () => network;
 export const explorerUrl = () => `https://explorer-studio.genlayer.com/address/${configuredAddress()}`;
+export const transactionExplorerUrl = (hash: string) => `https://explorer-studio.genlayer.com/transactions/${hash}`;
 
 async function ensureWalletNetwork(): Promise<void> {
   if (!window.ethereum || network !== "studionet") return;

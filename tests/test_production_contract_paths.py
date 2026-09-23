@@ -53,6 +53,7 @@ def load_production_harness():
         "_sha256_digest",
         "_consistent_verdict",
         "_parse_verdict",
+        "_parse_appeal_verdict",
         "_now",
         "_timing_available",
         "create_offering",
@@ -61,6 +62,8 @@ def load_production_harness():
         "submit_delivery_evidence",
         "submit_dispute_evidence",
         "confirm_ready_for_review",
+        "open_appeal",
+        "adjudicate_appeal",
         "settle",
         "claim_recovery",
         "cancel_enrollment",
@@ -86,6 +89,11 @@ def load_production_harness():
             value=0,
         ),
         vm=types.SimpleNamespace(UserError=UserError),
+        nondet=types.SimpleNamespace(
+            web=types.SimpleNamespace(get=lambda _url: None),
+            exec_prompt=lambda _prompt: "",
+        ),
+        eq_principle=types.SimpleNamespace(prompt_comparative=lambda callback, _principle: callback()),
     )
     namespace = {
         "Address": lambda value: value,
@@ -136,12 +144,191 @@ def load_production_harness():
         "enrollment_student_refunded",
         "student_offering_index",
         "digest_claim_index",
+        "enrollment_pre_appeal_decision",
+        "enrollment_appeal_appellant",
+        "enrollment_appeal_url",
+        "enrollment_appeal_digest",
+        "enrollment_appeal_stake",
+        "enrollment_appeal_result",
+        "enrollment_appeal_deadline",
+        "enrollment_appeal_recovery_deadline",
     ):
         setattr(instance, field, FakeMap())
     return instance, gl
 
 
 class ProductionContractPathTests(unittest.TestCase):
+    def test_appeal_adjudication_accepts_verified_text_containing_old_sentinel(self):
+        contract, gl = load_production_harness()
+        bodies = {
+            URL_TERMS: b"Locked terms with literal _DIGEST_MISMATCH used as harmless course text.",
+            URL_DELIVERY: b"Delivery record confirms all promised sessions and instructor attendance.",
+            URL_DISPUTE: b"Student dispute packet requests review of attendance documentation.",
+            "https://arweave.net/" + "a" * 43: b"Appeal record supplies new evidence supporting complete delivery.",
+        }
+        appeal_url = "https://arweave.net/" + "a" * 43
+        digest = lambda body: "sha256:" + hashlib.sha256(body).hexdigest()
+        gl.nondet.web.get = lambda url: types.SimpleNamespace(body=bodies[url])
+        gl.nondet.exec_prompt = lambda _prompt: json.dumps({
+            "appeal_result": "UPHELD",
+            "decision": "DELIVERED",
+            "curriculum_fidelity": "FULL",
+            "instructor_fidelity": "MATCH",
+            "reason": "Verified record confirms delivery.",
+        })
+
+        contract.offering_count = 1
+        contract.enrollment_count = 1
+        contract.enrollment_status[0] = "APPEAL_PENDING"
+        contract.enrollment_offering[0] = 0
+        contract.enrollment_pre_appeal_decision[0] = "DELIVERED"
+        contract.offering_terms_url[0] = URL_TERMS
+        contract.offering_terms_digest[0] = digest(bodies[URL_TERMS])
+        contract.offering_instructor[0] = "Prof. Bob"
+        contract.offering_duration_hours[0] = 20
+        contract.enrollment_delivery_url[0] = URL_DELIVERY
+        contract.enrollment_delivery_digest[0] = digest(bodies[URL_DELIVERY])
+        contract.enrollment_dispute_url[0] = URL_DISPUTE
+        contract.enrollment_dispute_digest[0] = digest(bodies[URL_DISPUTE])
+        contract.enrollment_appeal_url[0] = appeal_url
+        contract.enrollment_appeal_digest[0] = digest(bodies[appeal_url])
+        contract.enrollment_appeal_recovery_deadline[0] = 9999999999
+
+        self.assertEqual(contract.adjudicate_appeal(0), "APPEAL_RESOLVED")
+        self.assertEqual(contract.enrollment_appeal_result[0], "UPHELD")
+        self.assertEqual(contract.enrollment_decision[0], "DELIVERED")
+
+    def test_appeal_adjudication_fails_closed_on_digest_mismatch(self):
+        contract, gl = load_production_harness()
+        appeal_url = "https://arweave.net/" + "a" * 43
+        bodies = {
+            URL_TERMS: b"Locked course terms and syllabus commitment source document.",
+            URL_DELIVERY: b"Organizer delivery evidence source document for review.",
+            appeal_url: b"Tampered appeal bytes that no longer match the commitment.",
+        }
+        digest = lambda body: "sha256:" + hashlib.sha256(body).hexdigest()
+        gl.nondet.web.get = lambda url: types.SimpleNamespace(body=bodies[url])
+        contract.offering_count = 1
+        contract.enrollment_count = 1
+        contract.enrollment_status[0] = "APPEAL_PENDING"
+        contract.enrollment_offering[0] = 0
+        contract.enrollment_pre_appeal_decision[0] = "DELIVERED"
+        contract.offering_terms_url[0] = URL_TERMS
+        contract.offering_terms_digest[0] = digest(bodies[URL_TERMS])
+        contract.offering_instructor[0] = "Prof. Bob"
+        contract.offering_duration_hours[0] = 20
+        contract.enrollment_delivery_url[0] = URL_DELIVERY
+        contract.enrollment_delivery_digest[0] = digest(bodies[URL_DELIVERY])
+        contract.enrollment_dispute_url[0] = ""
+        contract.enrollment_dispute_digest[0] = ""
+        contract.enrollment_appeal_url[0] = appeal_url
+        contract.enrollment_appeal_digest[0] = DIGEST_OTHER
+        contract.enrollment_appeal_recovery_deadline[0] = 9999999999
+
+        self.assertEqual(contract.adjudicate_appeal(0), "RECOVERY_WAIT")
+        self.assertEqual(contract.enrollment_appeal_result[0], "UNRESOLVED")
+        self.assertEqual(contract.enrollment_decision[0], "EVIDENCE_UNAVAILABLE")
+
+    def test_appeal_parser_requires_economically_consistent_result(self):
+        contract, _ = load_production_harness()
+        upheld = contract._parse_appeal_verdict({
+            "appeal_result": "UPHELD", "decision": "DELIVERED",
+            "curriculum_fidelity": "FULL", "instructor_fidelity": "MATCH", "reason": "Record confirms delivery."
+        }, "DELIVERED")
+        self.assertEqual(upheld[:2], ("UPHELD", "DELIVERED"))
+        overturned = contract._parse_appeal_verdict({
+            "appeal_result": "OVERTURNED", "decision": "NOT_DELIVERED",
+            "curriculum_fidelity": "BREACH", "instructor_fidelity": "MATCH", "reason": "New evidence proves non-delivery."
+        }, "DELIVERED")
+        self.assertEqual(overturned[:2], ("OVERTURNED", "NOT_DELIVERED"))
+        self.assertIsNone(contract._parse_appeal_verdict({
+            "appeal_result": "UPHELD", "decision": "NOT_DELIVERED",
+            "curriculum_fidelity": "BREACH", "instructor_fidelity": "MATCH", "reason": "Contradiction."
+        }, "DELIVERED"))
+        self.assertIsNone(contract._parse_appeal_verdict({
+            "appeal_result": "OVERTURNED", "decision": "DELIVERED",
+            "curriculum_fidelity": "FULL", "instructor_fidelity": "MATCH", "reason": "Contradiction."
+        }, "DELIVERED"))
+
+    def test_stake_backed_appeal_opening_and_duplicate_protection(self):
+        contract, gl = load_production_harness()
+        fee = 1_000
+        gl.message.sender_address = SenderAddress(ORGANIZER)
+        contract.create_offering("Appealable Course", "AP-01", fee, 20, URL_TERMS, DIGEST_TERMS)
+        contract.lock_offering_curriculum(0, DIGEST_CURRICULUM, "Prof. Bob")
+        gl.message.sender_address = SenderAddress(STUDENT_A)
+        gl.message.value = fee
+        contract.enroll(0)
+        contract.enrollment_status[0] = "ADJUDICATED"
+        contract.enrollment_decision[0] = "DELIVERED"
+        contract.enrollment_curriculum_fidelity[0] = "FULL"
+        contract.enrollment_instructor_fidelity[0] = "MATCH"
+
+        gl.message.value = 99
+        with self.assertRaisesRegex(UserError, "EXACT_APPEAL_STAKE_REQUIRED"):
+            contract.open_appeal(0, URL_DISPUTE, DIGEST_OTHER)
+
+        gl.message.value = 100
+        self.assertEqual(contract.open_appeal(0, URL_DISPUTE, DIGEST_OTHER), "APPEAL_PENDING")
+        self.assertEqual(contract.enrollment_pre_appeal_decision[0], "DELIVERED")
+        self.assertEqual(contract.enrollment_appeal_stake[0], 100)
+        self.assertEqual(contract.total_received, 1_100)
+        self.assertEqual(contract.total_held, 1_100)
+
+        contract.enrollment_status[0] = "ADJUDICATED"
+        with self.assertRaisesRegex(UserError, "DIGEST_ALREADY_USED"):
+            contract.open_appeal(0, URL_DISPUTE, DIGEST_OTHER)
+
+    def test_upheld_student_appeal_awards_stake_to_organizer(self):
+        contract, gl = load_production_harness()
+        fee = 1_000
+        contract.offering_count = 1
+        contract.enrollment_count = 1
+        contract.offering_organizer[0] = ORGANIZER
+        contract.enrollment_student[0] = STUDENT_A
+        contract.enrollment_offering[0] = 0
+        contract.enrollment_fee[0] = fee
+        contract.enrollment_status[0] = "APPEAL_RESOLVED"
+        contract.enrollment_decision[0] = "DELIVERED"
+        contract.enrollment_curriculum_fidelity[0] = "FULL"
+        contract.enrollment_instructor_fidelity[0] = "MATCH"
+        contract.enrollment_appeal_appellant[0] = STUDENT_A
+        contract.enrollment_appeal_stake[0] = 100
+        contract.enrollment_appeal_result[0] = "UPHELD"
+        contract.total_received = 1_100
+        contract.total_held = 1_100
+
+        gl.message.sender_address = SenderAddress(STUDENT_A)
+        self.assertEqual(contract.settle(0), "SETTLED")
+        self.assertEqual(contract.enrollment_organizer_paid[0], 1_100)
+        self.assertEqual(contract.enrollment_student_refunded[0], 0)
+        self.assertEqual(contract.total_held, 0)
+
+    def test_overturned_student_appeal_returns_stake_with_refund(self):
+        contract, gl = load_production_harness()
+        fee = 1_000
+        contract.offering_count = 1
+        contract.enrollment_count = 1
+        contract.offering_organizer[0] = ORGANIZER
+        contract.enrollment_student[0] = STUDENT_A
+        contract.enrollment_offering[0] = 0
+        contract.enrollment_fee[0] = fee
+        contract.enrollment_status[0] = "APPEAL_RESOLVED"
+        contract.enrollment_decision[0] = "NOT_DELIVERED"
+        contract.enrollment_curriculum_fidelity[0] = "BREACH"
+        contract.enrollment_instructor_fidelity[0] = "MATCH"
+        contract.enrollment_appeal_appellant[0] = STUDENT_A
+        contract.enrollment_appeal_stake[0] = 100
+        contract.enrollment_appeal_result[0] = "OVERTURNED"
+        contract.total_received = 1_100
+        contract.total_held = 1_100
+
+        gl.message.sender_address = SenderAddress(STUDENT_A)
+        self.assertEqual(contract.settle(0), "SETTLED")
+        self.assertEqual(contract.enrollment_organizer_paid[0], 0)
+        self.assertEqual(contract.enrollment_student_refunded[0], 1_100)
+        self.assertEqual(contract.total_held, 0)
+
     def test_digest_verification(self):
         contract, _ = load_production_harness()
         body = b"CS101 Intro to AI & LLM Systems - Syllabus and Schedule"

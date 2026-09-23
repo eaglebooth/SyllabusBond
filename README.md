@@ -17,6 +17,12 @@
 
 The landing page and verification ledger read counts, custody totals, and the latest enrollment directly from the deployed contract without requiring a wallet. Writes request the GenLayer Studio network and are followed by authoritative contract read-back before the UI claims updated state.
 
+### Stake-Backed Appeals & Evidence Integrity v2
+
+After the first jury ruling, either party may open one appeal with immutable new evidence and a 10% tuition stake rounded up to the smallest GEN unit. A second GenLayer consensus round can uphold or overturn the original decision. Overturned appeals return the stake to the appellant; upheld appeals award it to the counterparty. Settlement conserves tuition plus stake, while unresolved appeal consensus fails closed into bounded recovery.
+
+The enrollment workspace also reads every evidence commitment and deadline directly from the contract. It independently recomputes SHA-256 in the browser, displays lifecycle countdowns, gates time-sensitive actions, and links accepted transactions to GenLayer Explorer. This v2 milestone changes contract storage and therefore requires a new Studionet deployment before the frontend address is switched.
+
 ---
 
 ## 1. Overview & GenLayer Fit

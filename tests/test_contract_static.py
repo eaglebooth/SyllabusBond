@@ -17,7 +17,7 @@ def load_contract_verdict_methods():
     methods = [
         node for node in contract.body
         if isinstance(node, ast.FunctionDef)
-        and node.name in ("_parse_verdict", "_consistent_verdict")
+        and node.name in ("_parse_verdict", "_parse_appeal_verdict", "_consistent_verdict")
     ]
     test_class = ast.ClassDef(
         name="VerdictHarness",
@@ -93,6 +93,22 @@ class ContractStaticTests(unittest.TestCase):
             "testnetAsimov",
         ]:
             self.assertNotIn(marker, SOURCE)
+
+    def test_stake_backed_appeal_surface(self):
+        for marker in [
+            "def open_appeal(",
+            "def adjudicate_appeal(",
+            'raise gl.vm.UserError("EXACT_APPEAL_STAKE_REQUIRED")',
+            'raise gl.vm.UserError("APPEAL_WINDOW_ACTIVE")',
+            'raise gl.vm.UserError("APPEAL_WINDOW_CLOSED")',
+            'self.enrollment_status[enrollment_id] = "APPEAL_PENDING"',
+            'self.enrollment_status[enrollment_id] = "APPEAL_RESOLVED"',
+            'appeal_result == "OVERTURNED"',
+            'appeal_result == "UPHELD"',
+            'return ("DIGEST_MISMATCH", "")',
+            "enrollment_appeal_recovery_deadline",
+        ]:
+            self.assertIn(marker, SOURCE)
 
     def test_public_methods_flat_signatures(self):
         for node in ast.walk(TREE):
