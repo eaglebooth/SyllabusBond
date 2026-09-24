@@ -3,7 +3,7 @@
 ## Source to deploy
 
 - File: `contracts/SyllabusBond.py`
-- SHA-256: `955074156151105168af65b56ee555cca6257210bbbee931f81b8d8faec0603b`
+- SHA-256: `6fea96465a82fa00bf026a089bc818ec822aad140dcd5cdf489b2dfef5277bd3`
 - Network: GenLayer Studionet
 - Constructor arguments: none
 
@@ -18,6 +18,9 @@ This release adds persistent appeal state, payable appeal stakes, two public wri
 
 ## Post-deployment gate
 
+- Superseded test address: `0x378D5cFCdDbb0614ECF7d548888B675A0Ba0019B`
+- Redeploy required: Studionet testing found that a rolled-back delivery-evidence write could leave a `FUNDED` enrollment outside the recovery state set. Source v0.2.17 fixes this and adds a regression test. Do not use the superseded address as the production target.
+
 1. Confirm `get_counts` and `get_totals` return zeroed v2 state.
 2. Update `frontend/.env.local` and Vercel `NEXT_PUBLIC_CONTRACT_ADDRESS`.
 3. Run a full initial adjudication followed by an appeal.
@@ -26,4 +29,3 @@ This release adds persistent appeal state, payable appeal stakes, two public wri
 6. Record exact transaction hashes and update Explorer/README evidence.
 
 Do not deploy the v2 frontend publicly before completing steps 1–2; it expects the new appeal fields returned by `get_enrollment` and `get_enrollment_evidence`.
-

@@ -37,7 +37,7 @@ class ContractStaticTests(unittest.TestCase):
         self.assertEqual(
             SOURCE.splitlines()[:3],
             [
-                "# v0.2.16",
+                "# v0.2.17",
                 '# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }',
                 "from genlayer import *",
             ],

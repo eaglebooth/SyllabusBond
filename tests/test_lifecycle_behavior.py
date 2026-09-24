@@ -161,6 +161,27 @@ class LifecycleBehaviorTests(unittest.TestCase):
         with self.assertRaisesRegex(UserError, "NOT_IN_RECOVERY_STATE"):
             contract.claim_recovery(enr_id)
 
+    def test_funded_escrow_can_recover_after_deadline_when_evidence_write_rolls_back(self):
+        contract, gl = load_production_harness()
+        fee = 100_000
+        gl.message_raw = {"datetime": "2026-09-23T10:00:00Z"}
+
+        gl.message.sender_address = SenderAddress(ORGANIZER)
+        off_id = contract.create_offering("Recovery regression", "REC-01", fee, 10, URL_TERMS, DIGEST_TERMS)
+        contract.lock_offering_curriculum(off_id, DIGEST_CURRICULUM, "Dr. Alice")
+
+        gl.message.sender_address = SenderAddress(STUDENT_A)
+        gl.message.value = fee
+        enr_id = contract.enroll(off_id)
+        with self.assertRaisesRegex(UserError, "RECOVERY_WINDOW_ACTIVE"):
+            contract.claim_recovery(enr_id)
+
+        gl.message_raw = {"datetime": "2026-09-23T10:03:00Z"}
+        self.assertEqual(contract.claim_recovery(enr_id), "RECOVERED")
+        self.assertEqual(contract.total_held, 0)
+        self.assertEqual(contract.enrollment_organizer_paid[enr_id], fee // 2)
+        self.assertEqual(contract.enrollment_student_refunded[enr_id], fee - fee // 2)
+
 
 if __name__ == "__main__":
     unittest.main()

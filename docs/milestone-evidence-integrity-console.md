@@ -23,4 +23,4 @@
 
 ## Deployment impact
 
-Contract storage and public methods changed. The existing address `0x85F77d08727Ca798875387E57736077258Be255D` remains v1 evidence only. Deploy `contracts/SyllabusBond.py` as a new Studionet contract, then update `NEXT_PUBLIC_CONTRACT_ADDRESS` and runtime evidence before submission.
+Contract storage and public methods changed. Address `0x85F77d08727Ca798875387E57736077258Be255D` remains v1 evidence only. Stake-backed appeals v2 is deployed at `0x378D5cFCdDbb0614ECF7d548888B675A0Ba0019B`; runtime appeal evidence is the remaining release gate.

@@ -9,7 +9,7 @@
 - Category tag 2: Evidence Adjudication
 - Website: https://frontend-five-eta-88.vercel.app/
 - GitHub: https://github.com/eaglebooth/SyllabusBond
-- Contract: https://explorer-studio.genlayer.com/address/0x85F77d08727Ca798875387E57736077258Be255D
+- Contract: https://explorer-studio.genlayer.com/address/0x378D5cFCdDbb0614ECF7d548888B675A0Ba0019B
 - Network: studionet
 - Logo: `frontend/public/syllabusbond-logo.png` (square PNG, under 2 MB)
 

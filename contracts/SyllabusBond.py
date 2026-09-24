@@ -1,4 +1,4 @@
-# v0.2.16
+# v0.2.17
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 from genlayer import *
 import typing
@@ -755,7 +755,12 @@ UPHELD means the decision is unchanged. OVERTURNED means the decision changed.""
             raise gl.vm.UserError("ENROLLMENT_NOT_FOUND")
         status = self.enrollment_status[enrollment_id]
         if status not in ("RECOVERY_WAIT", "APPEAL_PENDING"):
-            raise gl.vm.UserError("NOT_IN_RECOVERY_STATE")
+            # A failed/rolled-back evidence transaction can leave funded escrow
+            # in a pre-review state. Permit a party to recover it only after the
+            # offering's bounded recovery deadline and only when chain time is
+            # available; this preserves the early-recovery guard in local VMs.
+            if status not in ("FUNDED", "CHALLENGE_WINDOW", "READY_FOR_REVIEW") or not self._timing_available():
+                raise gl.vm.UserError("NOT_IN_RECOVERY_STATE")
 
         sender = gl.message.sender_address.as_hex.lower()
         offering_id = self.enrollment_offering[enrollment_id]

@@ -12,6 +12,7 @@
 - Added deadline-aware action gating to prevent predictable lifecycle reverts.
 - Added clickable GenLayer Explorer receipts after writes and four frontend logic tests.
 - Added appeal lifecycle fields to enrollment/evidence read APIs and frontend flows.
+- Added post-deadline recovery for funded/pre-review escrow when an evidence write rolls back, closing a trapped-funds edge case found during Studionet lifecycle testing.
 - Requires a new Studionet contract deployment because storage and write methods changed.
 
 ## 2026-08-29

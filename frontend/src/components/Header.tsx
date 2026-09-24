@@ -7,7 +7,7 @@ import {useWallet} from "@/lib/wallet";
 import {explorerUrl} from "@/lib/genlayer";
 
 type Props={account?:string;onConnectWallet?:()=>void;onRefresh?:()=>void;isRefreshing?:boolean};
-const EXPLORER_URL="https://explorer-studio.genlayer.com/address/0x85F77d08727Ca798875387E57736077258Be255D";
+const EXPLORER_URL="https://explorer-studio.genlayer.com/address/0x378D5cFCdDbb0614ECF7d548888B675A0Ba0019B";
 
 export const Header=({account="",onConnectWallet,onRefresh,isRefreshing=false}:Props)=>{
  const {connect,isConnecting}=useWallet();
