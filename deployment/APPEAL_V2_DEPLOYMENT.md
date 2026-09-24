@@ -20,6 +20,8 @@ This release adds persistent appeal state, payable appeal stakes, two public wri
 
 - Superseded test address: `0x378D5cFCdDbb0614ECF7d548888B675A0Ba0019B`
 - Redeploy required: Studionet testing found that a rolled-back delivery-evidence write could leave a `FUNDED` enrollment outside the recovery state set. Source v0.2.17 fixes this and adds a regression test. Do not use the superseded address as the production target.
+- Active v0.2.17 address: `0x681B80032A0BAfB263062418a462E39951e32532`
+- Initial read: zero offerings, zero enrollments, zero custody totals, and zero contract balance.
 
 1. Confirm `get_counts` and `get_totals` return zeroed v2 state.
 2. Update `frontend/.env.local` and Vercel `NEXT_PUBLIC_CONTRACT_ADDRESS`.

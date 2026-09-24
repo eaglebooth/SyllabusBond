@@ -1,7 +1,7 @@
 # SyllabusBond — Decentralized Syllabus Delivery & Tuition Escrow
 
-> **Deployed Contract Target**: `0x378D5cFCdDbb0614ECF7d548888B675A0Ba0019B` (GenLayer Studionet, Chain 61999)  
-> **Explorer**: [https://explorer-studio.genlayer.com/address/0x378D5cFCdDbb0614ECF7d548888B675A0Ba0019B](https://explorer-studio.genlayer.com/address/0x378D5cFCdDbb0614ECF7d548888B675A0Ba0019B)
+> **Deployed Contract Target**: `0x681B80032A0BAfB263062418a462E39951e32532` (GenLayer Studionet, Chain 61999)  
+> **Explorer**: [https://explorer-studio.genlayer.com/address/0x681B80032A0BAfB263062418a462E39951e32532](https://explorer-studio.genlayer.com/address/0x681B80032A0BAfB263062418a462E39951e32532)
 
 > **Deployed testnet timing profile**: the current contract stores the promised duration and uses short 120/30/30-second delivery, challenge, and recovery windows for reproducible Studionet demonstrations.
 
@@ -11,8 +11,8 @@
 
 - Website: https://frontend-five-eta-88.vercel.app/
 - Network: GenLayer studionet (`Preview` in Project Explorer)
-- Contract: `0x378D5cFCdDbb0614ECF7d548888B675A0Ba0019B`
-- Explorer: https://explorer-studio.genlayer.com/address/0x378D5cFCdDbb0614ECF7d548888B675A0Ba0019B
+- Contract: `0x681B80032A0BAfB263062418a462E39951e32532`
+- Explorer: https://explorer-studio.genlayer.com/address/0x681B80032A0BAfB263062418a462E39951e32532
 - Public proof: enrollment `#0` is `SETTLED / DELIVERED / FULL / MATCH`; the organizer received `1 GEN`.
 
 The landing page and verification ledger read counts, custody totals, and the latest enrollment directly from the deployed contract without requiring a wallet. Writes request the GenLayer Studio network and are followed by authoritative contract read-back before the UI claims updated state.

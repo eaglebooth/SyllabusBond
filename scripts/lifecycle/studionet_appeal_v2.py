@@ -12,16 +12,16 @@ from genlayer_py import create_account, create_client
 from genlayer_py.chains import studionet
 
 
-ADDRESS = os.environ.get("SYLLABUSBOND_CONTRACT_ADDRESS", "0x378D5cFCdDbb0614ECF7d548888B675A0Ba0019B")
+ADDRESS = os.environ.get("SYLLABUSBOND_CONTRACT_ADDRESS", "0x681B80032A0BAfB263062418a462E39951e32532")
 RPC_URL = "https://studio.genlayer.com/api"
 FEE = 10**16
 APPEAL_STAKE = 10**15
-# Public immutable fixtures: a blockchain-engineering program specification,
-# the v1 course-delivery record, and an independent smart-contract audit packet.
-TERMS_URL = "https://arweave.net/z4LUVfc8kUCigvV_Gc-iXekWdwbOxu4NOclEwuz2-YE"
-TERMS_DIGEST = "sha256:3efe38f84999785a6e377d03165658674ff14165ab109b7a84f9dbc464c6477f"
-DELIVERY_URL = "https://arweave.net/fSukBpWLRDRMEesNSdrhE51cHEtEwnrRH3sUDKrMZWk"
-DELIVERY_DIGEST = "sha256:560d0d6436a6f85d9bf91eb8b204cb8db29707a5d464a9b1b981b40578d1aca3"
+# Public immutable fixtures: the course terms and delivery record that completed
+# the v1 payout lifecycle, plus an independent packet for second-round review.
+TERMS_URL = "https://gateway.pinata.cloud/ipfs/QmPU5Mbk6w7sudTQroAkajS7MXsWegxjkmfMMfViNvXn9c"
+TERMS_DIGEST = "sha256:d45b9fc4bb0dff34fcf638d6b21ddaf34ace8352405d07c5bebf2baa5bb235df"
+DELIVERY_URL = "https://gateway.pinata.cloud/ipfs/QmNeniPAmyVTjSpXRRqCK94Dr77DVRjS6uvbdcwNTxF4nK"
+DELIVERY_DIGEST = "sha256:20faf20bf16f2c66f2a8e670f0d832e88709cd08af06b8a4fa80abf88667d772"
 APPEAL_URL = "https://arweave.net/EOrW1khtJaqKy4MDn6HKgxrpxWGNh39nFwLkmuDzqRE"
 APPEAL_DIGEST = "sha256:4b93626dae47456bd01f60412589732fa1ffd8327c223975b96613593c047435"
 
@@ -81,7 +81,7 @@ def main():
 
     if not resume_offering:
         transactions["create_offering"] = submit(organizer, "create_offering", [
-            "Product recall compliance training", f"SB-APPEAL-{offering_id}", FEE, 8, TERMS_URL, TERMS_DIGEST,
+            "GenLayer intelligent contracts workshop", f"SB-APPEAL-{offering_id}", FEE, 8, TERMS_URL, TERMS_DIGEST,
         ])
         wait("OFFERING_CREATED", lambda: {"ready": int(read("get_counts")["offering_count"]) > offering_id})
     offering = read("get_offering", [offering_id])

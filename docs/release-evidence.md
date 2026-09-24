@@ -1,30 +1,47 @@
-# SyllabusBond — Release Evidence
+# SyllabusBond v0.2.17 — Release Evidence
 
-**Current Project Status**: `STUDIONET_DEPLOYED_AND_VERIFIED`  
-**Deployed Contract Target**: `0x85F77d08727Ca798875387E57736077258Be255D` (GenLayer Studionet, Chain 61999)  
-**Explorer**: [https://explorer-studio.genlayer.com/address/0x85F77d08727Ca798875387E57736077258Be255D](https://explorer-studio.genlayer.com/address/0x85F77d08727Ca798875387E57736077258Be255D)
+**Status**: `STUDIONET_DEPLOYED_AND_RECOVERY_VERIFIED`  
+**Contract**: `0x681B80032A0BAfB263062418a462E39951e32532`  
+**Network**: GenLayer Studionet (chain 61999)  
+**Explorer**: <https://explorer-studio.genlayer.com/address/0x681B80032A0BAfB263062418a462E39951e32532>  
+**Source SHA-256**: `6fea96465a82fa00bf026a089bc818ec822aad140dcd5cdf489b2dfef5277bd3`
 
-**Deployed testnet timing profile**: the current contract stores the promised duration and uses 120/30/30-second delivery, challenge, and recovery windows for reproducible lifecycle evidence.
+## Verification gates
 
-| Gate / Feature | Status | Evidence Summary & Proof Location |
+| Gate | Result | Evidence |
 |---|---|---|
-| **Toolchain & Headers** | `PASS` | Verified header `# v0.2.16`, `Depends: py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6`, syntax parsed with Python AST. |
-| **Contract Schema & Linter** | `PASS` | Python AST compilation exits 0, no syntax errors, flat method signatures (<= 6 args). |
-| **Functions & Storage** | `PASS` | Uses `u256`, `str`, `TreeMap[u256, str]`, `TreeMap[u256, u256]`, `TreeMap[str, u256]`. No float, no unbounded loops. |
-| **Runtime Writes (Local)** | `PASS` | Unit tests verify `create_offering`, `enroll`, `submit_delivery_evidence`, `submit_dispute_evidence`, `settle`, `claim_recovery`. |
-| **State Proof (Local)** | `PASS` | Local behavioral test suite validates exact pre-state to post-state transitions. |
-| **Failure Proof (Local)** | `PASS` | Negative test matrix passes: wrong caller (`ORGANIZER_ONLY`, `STUDENT_ONLY`), wrong attached value, digest mismatch, double settlement. |
-| **Value & Conservation Proof** | `PASS` | Tested invariant: $\text{total\_received} == \text{total\_held} + \text{total\_paid} + \text{total\_refunded}$ across all settlement branches. |
-| **Consensus & Equivalence** | `PASS` | `prompt_comparative` used with semantic outcome validation; `_consistent_verdict` filters contradictory outputs. |
-| **Address Configuration** | `PASS` | Configured active deployment `0x85F77d08727Ca798875387E57736077258Be255D` in `.env.local`; runtime override in localStorage supported. |
-| **Frontend Production Build** | `PASS` | Next.js 16 + React 19 Turbopack build compiles cleanly with zero errors/warnings; single document scrollbar enforced. |
-| **Provenance & Digest Integrity** | `PASS` | Source raw byte SHA-256 calculation checked against locked commitments. |
-| **Deployed Runtime Target** | `PASS` | Contract deployed to Studionet at `0x85F77d08727Ca798875387E57736077258Be255D`. |
-| **Two-Wallet Custody & Recovery** | `PASS` | Student escrowed 1 GEN; evidence-unavailable recovery finalized with two 0.5 GEN child transfers, then contract balance and `total_held` returned to 0. Recovery tx: `0x5ba357c8506cb986cca617ff1e09595256c89154604e43517fb8ab4cb91c3fa8`. |
-| **Two-Wallet Full Delivery Payout** | `PASS` | Jury finalized `DELIVERED / FULL / MATCH`; `settle()` emitted one 1 GEN child transfer to organizer and returned contract balance and `total_held` to 0. Settlement tx: `0xe44193b4698b05ccb3ec2fe9db85ac14031ca8e9323171696af83d072816c2db`. |
-| **Material-Reduction Jury Path** | `NOT_CLAIMED` | Two testnet attempts safely resolved to `RECOVERY_WAIT` because public evidence retrieval/semantic consensus was unavailable. This branch is covered by local behavioral tests but is not claimed as a deployed jury pass. |
+| Contract suite | `PASS` | 25/25 Python tests, including funded/pre-review post-deadline recovery regression. |
+| Frontend suite | `PASS` | 4/4 UI tests, ESLint clean, Next.js production build generated 9/9 routes. |
+| Initial state | `PASS` | Zero offerings, enrollments, custody totals, and contract balance after deployment. |
+| Funded lifecycle | `PASS` | Two-wallet offering, curriculum lock, enrollment, delivery, review readiness, and nondeterministic adjudication executed on Studionet. |
+| Fail-closed consensus | `PASS` | Exact comparative consensus did not form, so adjudication returned `EVIDENCE_UNAVAILABLE` and `RECOVERY_WAIT`; no unilateral payout occurred. |
+| Recovery and conservation | `PASS` | Recovery split 0.01 GEN equally after the deadline; `total_held = 0`, contract balance = 0, and received = held + paid + refunded. |
+| Stake-backed appeal success | `NOT_CLAIMED` | Appeal paths are covered by production-harness tests; this deployed lifecycle did not enter appeal because the first jury round failed closed. |
 
----
+## Studionet transaction bundle
 
-### Scope Note
-The contract deployment and testnet transactions cited above were explicitly user-authorized. Frontend production hosting must be verified separately after deployment.
+| Step | Transaction |
+|---|---|
+| Create offering | `0x2310167ca50db6e427022c45c6c6415e2dc94fd876622fb1b72ce0149ae44c8f` |
+| Lock curriculum and instructor | `0xc0b78f6ff0aa521981dd94211ff70b3101ae13a41f66025fde4a5c6a7da79008` |
+| Enroll with 0.01 GEN | `0xc0695611ac71d50715e70213010322c99854fc65f9264751c1102de183bb5d3e` |
+| Submit immutable delivery evidence | `0x16663d32aa67ce9d20588a568f1b2d52b7030f24617e488753bae2ff668ea362` |
+| Confirm ready for review | `0x8eb6e3c645fd7d7af73e3f72b424772e816b739999f31b8f99c49a60c3c1220d` |
+| AI adjudication (fail-closed) | `0xfa8b1a8c66e64ec2347858095abf692d1cd539900a0ca9e50e7c91fe9af8641e` |
+| Deadline recovery | `0x002952bf65a973e86d00f935776873f7cbcc9f2e2d717a687352121e1c38c672` |
+
+Final authoritative state:
+
+```json
+{
+  "status": "RECOVERED",
+  "decision": "RECOVERED",
+  "total_received": 10000000000000000,
+  "total_held": 0,
+  "total_paid_to_organizers": 5000000000000000,
+  "total_refunded_to_students": 5000000000000000,
+  "contract_balance": 0
+}
+```
+
+The earlier addresses remain historical evidence only. The frontend and release links target the recovery-hardened v0.2.17 deployment above.

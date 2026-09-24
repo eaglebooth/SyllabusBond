@@ -23,4 +23,4 @@
 
 ## Deployment impact
 
-Contract storage and public methods changed. Address `0x85F77d08727Ca798875387E57736077258Be255D` remains v1 evidence only. Stake-backed appeals v2 is deployed at `0x378D5cFCdDbb0614ECF7d548888B675A0Ba0019B`; runtime appeal evidence is the remaining release gate.
+Contract storage and public methods changed. Address `0x85F77d08727Ca798875387E57736077258Be255D` remains v1 evidence only. Recovery-hardened stake-backed appeals v2 is deployed at `0x681B80032A0BAfB263062418a462E39951e32532`; runtime appeal evidence is the remaining release gate.
