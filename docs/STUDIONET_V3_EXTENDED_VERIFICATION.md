@@ -1,6 +1,6 @@
 # SyllabusBond v0.3 Extended Studionet Verification
 
-Date: 2026-10-01  
+Date: 2026-10-01
 Contract tested: `0xf8771bcFe84b62dB407C31F3bC54DF8E4a08b9e4`
 
 ## Verified on chain
