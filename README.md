@@ -1,9 +1,9 @@
 # SyllabusBond — Decentralized Syllabus Delivery & Tuition Escrow
 
-> **Current source release**: v0.3.0 Progressive Module Escrow. The address below remains historical v0.2.17 until the new funded lifecycle passes on Studionet.
+> **Current release**: v0.3.0 Progressive Module Escrow, verified with a funded two-wallet lifecycle on Studionet.
 
-> **Deployed Contract Target**: `0x681B80032A0BAfB263062418a462E39951e32532` (GenLayer Studionet, Chain 61999)  
-> **Explorer**: [https://explorer-studio.genlayer.com/address/0x681B80032A0BAfB263062418a462E39951e32532](https://explorer-studio.genlayer.com/address/0x681B80032A0BAfB263062418a462E39951e32532)
+> **Deployed Contract Target**: `0xf8771bcFe84b62dB407C31F3bC54DF8E4a08b9e4` (GenLayer Studionet, Chain 61999)
+> **Explorer**: [https://explorer-studio.genlayer.com/address/0xf8771bcFe84b62dB407C31F3bC54DF8E4a08b9e4](https://explorer-studio.genlayer.com/address/0xf8771bcFe84b62dB407C31F3bC54DF8E4a08b9e4)
 
 > **Deployed testnet timing profile**: the current contract stores the promised duration and uses short 120/30/30-second delivery, challenge, and recovery windows for reproducible Studionet demonstrations.
 
@@ -13,9 +13,9 @@
 
 - Website: https://frontend-five-eta-88.vercel.app/
 - Network: GenLayer studionet (`Preview` in Project Explorer)
-- Contract: `0x681B80032A0BAfB263062418a462E39951e32532`
-- Explorer: https://explorer-studio.genlayer.com/address/0x681B80032A0BAfB263062418a462E39951e32532
-- Public proof: enrollment `#0` is `SETTLED / DELIVERED / FULL / MATCH`; the organizer received `1 GEN`.
+- Contract: `0xf8771bcFe84b62dB407C31F3bC54DF8E4a08b9e4`
+- Explorer: https://explorer-studio.genlayer.com/address/0xf8771bcFe84b62dB407C31F3bC54DF8E4a08b9e4
+- Public proof: offering `#0`, enrollment `#0`, module 1 accepted with `0.000333333333333333 GEN` released and `0.000666666666666667 GEN` still protected.
 
 The landing page and verification ledger read counts, custody totals, and the latest enrollment directly from the deployed contract without requiring a wallet. Writes request the GenLayer Studio network and are followed by authoritative contract read-back before the UI claims updated state.
 
