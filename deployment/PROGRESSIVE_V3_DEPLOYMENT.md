@@ -1,10 +1,12 @@
 # Progressive Escrow v0.3 Deployment
 
-Status: **completed and verified**
+Status: **v0.3.0 verified; v0.3.1 appeal-window patch requires redeployment**
 
 - Contract: `0xf8771bcFe84b62dB407C31F3bC54DF8E4a08b9e4`
 - Offering/enrollment proof: `#0 / #0`
 - Production: https://frontend-five-eta-88.vercel.app
+
+The current address remains safe for settlement/recovery, but its 60-second post-jury appeal window was not operationally reliable under observed Studionet latency. Deploy the current `contracts/SyllabusBond.py` source as v0.3.1 and repeat the appeal-after-partial lifecycle before marking appeals fully verified.
 
 Deploy `contracts/SyllabusBond.py` to GenLayer Studionet with **no constructor arguments**.
 

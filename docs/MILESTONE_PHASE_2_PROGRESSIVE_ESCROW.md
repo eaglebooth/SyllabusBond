@@ -39,11 +39,13 @@ The final checkpoint absorbs all integer remainder. Settlement, cancellation, ap
 
 ## Verification evidence
 
-- Contract suite: 30 passing tests.
+- Contract suite: 32 passing tests, including 10,000 randomized accounting lifecycles.
 - Frontend suite: 6 passing tests.
 - Frontend lint: passing.
 - Production build: passing.
 - Funded Studionet lifecycle: offering `#0`, enrollment `#0`, first of three modules released with both conservation invariants verified.
+- Extended matrix: enrollment `#0` completed all three modules; timeout jury and unavailable recovery were executed on chain.
+- Live verification found the 60-second appeal window operationally too short. Source v0.3.1 fixes it, pending redeployment and appeal re-test.
 
 ## On-chain evidence
 

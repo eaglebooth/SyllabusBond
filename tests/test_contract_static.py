@@ -33,11 +33,14 @@ def load_contract_verdict_methods():
 
 
 class ContractStaticTests(unittest.TestCase):
+    def test_testnet_appeal_windows_cover_consensus_finalization(self):
+        self.assertGreaterEqual(SOURCE.count("u256(300)"), 2)
+        self.assertIn("u256(600)", SOURCE)
     def test_runner_header_and_syntax(self):
         self.assertEqual(
             SOURCE.splitlines()[:3],
             [
-                "# v0.3.0",
+                "# v0.3.1",
                 '# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }',
                 "from genlayer import *",
             ],

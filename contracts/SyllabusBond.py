@@ -1,4 +1,4 @@
-# v0.3.0
+# v0.3.1
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 from genlayer import *
 import typing
@@ -591,7 +591,9 @@ Return exactly one label: ACCEPTED, REJECTED, or UNAVAILABLE."""
             self.enrollment_curriculum_fidelity[enrollment_id] = "BREACH"
             self.enrollment_instructor_fidelity[enrollment_id] = "MATCH"
             self.enrollment_reason[enrollment_id] = "Module checkpoint rejected; remaining escrow is appealable."
-            self.enrollment_appeal_deadline[enrollment_id] = self._now() + u256(60)
+            # Studionet consensus/finalization can exceed one minute. Keep the
+            # appeal path operational after a jury result becomes observable.
+            self.enrollment_appeal_deadline[enrollment_id] = self._now() + u256(300)
             return "ADJUDICATED"
         self.checkpoint_status[key] = "UNAVAILABLE"
         self.checkpoint_reason[key] = "Evidence or consensus unavailable; bounded recovery enabled."
@@ -788,7 +790,7 @@ A paying outcome and non-paying outcome are NEVER equivalent."""
             self.enrollment_status[enrollment_id] = "RECOVERY_WAIT"
         else:
             self.enrollment_status[enrollment_id] = "ADJUDICATED"
-            self.enrollment_appeal_deadline[enrollment_id] = self._now() + u256(60)
+            self.enrollment_appeal_deadline[enrollment_id] = self._now() + u256(300)
 
         return self.enrollment_status[enrollment_id]
 
@@ -826,7 +828,7 @@ A paying outcome and non-paying outcome are NEVER equivalent."""
         self.enrollment_appeal_stake[enrollment_id] = required_stake
         self.enrollment_appeal_result[enrollment_id] = "PENDING"
         now = self._now()
-        self.enrollment_appeal_recovery_deadline[enrollment_id] = now + u256(120)
+        self.enrollment_appeal_recovery_deadline[enrollment_id] = now + u256(600)
         self.digest_claim_index[clean_digest] = enrollment_id + u256(1)
         self.enrollment_status[enrollment_id] = "APPEAL_PENDING"
         self.enrollment_reason[enrollment_id] = "Stake-backed appeal opened; awaiting GenLayer re-adjudication."

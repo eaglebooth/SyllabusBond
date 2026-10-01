@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-01 — Appeal Window Hardening v0.3.1
+
+- Extended the post-jury appeal window from 60 to 300 seconds after live Studionet verification showed consensus/finalization could consume the original window.
+- Extended appeal recovery from 120 to 600 seconds so re-adjudication has a practical execution window.
+- Added 10,000 deterministic randomized lifecycle/accounting sequences.
+- Added extended Studionet timeout, unavailable-evidence, recovery, and RPC stress evidence.
+
 ## 2026-10-01 — Progressive Module Escrow v0.3
 
 - Added organizer-configured 2–20 module offerings while preserving the one-module legacy path.
