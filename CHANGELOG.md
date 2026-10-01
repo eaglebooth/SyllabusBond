@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-01 — Progressive Module Escrow v0.3
+
+- Added organizer-configured 2–20 module offerings while preserving the one-module legacy path.
+- Added sequential checkpoint evidence, student acceptance/dispute, and comparative jury adjudication.
+- Added cumulative tranche accounting so odd fees settle exactly with no rounding dust.
+- Made cancellation, settlement, appeals, and recovery operate only on escrow remaining after partial payouts.
+- Added module progress/checkpoint views and a role-aware progressive escrow workspace.
+- Expanded verification to 30 contract tests and 6 frontend tests.
+
 ## 2026-09-23 — Stake-Backed Appeals & Evidence Integrity v2
 
 - Added payable, party-only appeals requiring a 10% tuition stake rounded up to the smallest GEN unit.

@@ -51,15 +51,22 @@ def load_production_harness():
         "_valid_immutable_url",
         "_valid_digest",
         "_sha256_digest",
+        "_checkpoint_key",
+        "_release_module_tranche",
         "_consistent_verdict",
         "_parse_verdict",
         "_parse_appeal_verdict",
         "_now",
         "_timing_available",
         "create_offering",
+        "configure_modules",
         "lock_offering_curriculum",
         "enroll",
         "submit_delivery_evidence",
+        "submit_module_checkpoint",
+        "accept_module_checkpoint",
+        "dispute_module_checkpoint",
+        "adjudicate_module_checkpoint",
         "submit_dispute_evidence",
         "confirm_ready_for_review",
         "open_appeal",
@@ -128,6 +135,7 @@ def load_production_harness():
         "offering_curriculum_digest",
         "offering_instructor",
         "offering_status",
+        "offering_module_count",
         "enrollment_offering",
         "enrollment_student",
         "enrollment_fee",
@@ -142,6 +150,18 @@ def load_production_harness():
         "enrollment_reason",
         "enrollment_organizer_paid",
         "enrollment_student_refunded",
+        "enrollment_next_module",
+        "enrollment_released_amount",
+        "enrollment_remaining_amount",
+        "enrollment_module_recovery_deadline",
+        "checkpoint_url",
+        "checkpoint_digest",
+        "checkpoint_dispute_url",
+        "checkpoint_dispute_digest",
+        "checkpoint_status",
+        "checkpoint_decision",
+        "checkpoint_reason",
+        "checkpoint_review_deadline",
         "student_offering_index",
         "digest_claim_index",
         "enrollment_pre_appeal_decision",
@@ -158,6 +178,130 @@ def load_production_harness():
 
 
 class ProductionContractPathTests(unittest.TestCase):
+    def test_three_module_progressive_release_absorbs_rounding_dust(self):
+        contract, gl = load_production_harness()
+        fee = 101
+        gl.message.sender_address = SenderAddress(ORGANIZER)
+        offering_id = contract.create_offering("Progressive Course", "MOD-03", fee, 12, URL_TERMS, DIGEST_TERMS)
+        self.assertEqual(contract.configure_modules(offering_id, 3), "MODULES_CONFIGURED")
+        contract.lock_offering_curriculum(offering_id, DIGEST_CURRICULUM, "Prof. Modular")
+
+        gl.message.sender_address = SenderAddress(STUDENT_A)
+        gl.message.value = fee
+        enrollment_id = contract.enroll(offering_id)
+        self.assertEqual(contract.enrollment_remaining_amount[enrollment_id], 101)
+
+        for index, expected_released in ((0, 33), (1, 67), (2, 101)):
+            gl.message.sender_address = SenderAddress(ORGANIZER)
+            url = "https://arweave.net/" + chr(97 + index) * 43
+            digest = "sha256:" + str(index + 6) * 64
+            self.assertEqual(
+                contract.submit_module_checkpoint(enrollment_id, index, url, digest),
+                "MODULE_REVIEW",
+            )
+            gl.message.sender_address = SenderAddress(STUDENT_A)
+            self.assertEqual(contract.accept_module_checkpoint(enrollment_id, index), "MODULE_ACCEPTED")
+            self.assertEqual(contract.enrollment_released_amount[enrollment_id], expected_released)
+            self.assertEqual(contract.enrollment_remaining_amount[enrollment_id], fee - expected_released)
+
+        self.assertEqual(contract.enrollment_status[enrollment_id], "SETTLED")
+        self.assertEqual(contract.total_held, 0)
+        self.assertEqual(contract.enrollment_organizer_paid[enrollment_id], fee)
+
+    def test_module_sequence_role_and_double_release_guards(self):
+        contract, gl = load_production_harness()
+        gl.message.sender_address = SenderAddress(ORGANIZER)
+        offering_id = contract.create_offering("Guarded Modules", "MOD-G", 90, 9, URL_TERMS, DIGEST_TERMS)
+        contract.configure_modules(offering_id, 3)
+        contract.lock_offering_curriculum(offering_id, DIGEST_CURRICULUM, "Prof. Guard")
+        gl.message.sender_address = SenderAddress(STUDENT_A)
+        gl.message.value = 90
+        enrollment_id = contract.enroll(offering_id)
+
+        with self.assertRaisesRegex(UserError, "ORGANIZER_ONLY"):
+            contract.submit_module_checkpoint(enrollment_id, 0, URL_DELIVERY, DIGEST_DELIVERY)
+        gl.message.sender_address = SenderAddress(ORGANIZER)
+        with self.assertRaisesRegex(UserError, "MODULE_OUT_OF_SEQUENCE"):
+            contract.submit_module_checkpoint(enrollment_id, 1, URL_DELIVERY, DIGEST_DELIVERY)
+        contract.submit_module_checkpoint(enrollment_id, 0, URL_DELIVERY, DIGEST_DELIVERY)
+        gl.message.sender_address = SenderAddress(STUDENT_A)
+        contract.accept_module_checkpoint(enrollment_id, 0)
+        with self.assertRaisesRegex(UserError, "MODULE_OUT_OF_SEQUENCE"):
+            contract.accept_module_checkpoint(enrollment_id, 0)
+
+    def test_recovery_only_splits_remaining_after_partial_release(self):
+        contract, gl = load_production_harness()
+        gl.message_raw = {"datetime": "2026-09-23T10:00:00Z"}
+        gl.message.sender_address = SenderAddress(ORGANIZER)
+        offering_id = contract.create_offering("Recoverable Modules", "MOD-R", 101, 9, URL_TERMS, DIGEST_TERMS)
+        contract.configure_modules(offering_id, 3)
+        contract.lock_offering_curriculum(offering_id, DIGEST_CURRICULUM, "Prof. Guard")
+        gl.message.sender_address = SenderAddress(STUDENT_A)
+        gl.message.value = 101
+        enrollment_id = contract.enroll(offering_id)
+        gl.message.sender_address = SenderAddress(ORGANIZER)
+        contract.submit_module_checkpoint(enrollment_id, 0, URL_DELIVERY, DIGEST_DELIVERY)
+        gl.message.sender_address = SenderAddress(STUDENT_A)
+        contract.accept_module_checkpoint(enrollment_id, 0)
+        gl.message_raw = {"datetime": "2026-09-23T10:03:00Z"}
+        self.assertEqual(contract.claim_recovery(enrollment_id), "RECOVERED")
+        self.assertEqual(contract.enrollment_organizer_paid[enrollment_id], 67)
+        self.assertEqual(contract.enrollment_student_refunded[enrollment_id], 34)
+        self.assertEqual(contract.total_held, 0)
+
+    def test_overturned_module_appeal_releases_only_current_tranche(self):
+        contract, gl = load_production_harness()
+        gl.message.sender_address = SenderAddress(ORGANIZER)
+        offering_id = contract.create_offering("Appealable Modules", "MOD-A", 101, 9, URL_TERMS, DIGEST_TERMS)
+        contract.configure_modules(offering_id, 3)
+        contract.lock_offering_curriculum(offering_id, DIGEST_CURRICULUM, "Prof. Appeal")
+        gl.message.sender_address = SenderAddress(STUDENT_A)
+        gl.message.value = 101
+        enrollment_id = contract.enroll(offering_id)
+        gl.message.sender_address = SenderAddress(ORGANIZER)
+        contract.submit_module_checkpoint(enrollment_id, 0, URL_DELIVERY, DIGEST_DELIVERY)
+        gl.message.sender_address = SenderAddress(STUDENT_A)
+        contract.accept_module_checkpoint(enrollment_id, 0)
+
+        contract.enrollment_status[enrollment_id] = "APPEAL_RESOLVED"
+        contract.enrollment_decision[enrollment_id] = "DELIVERED"
+        contract.enrollment_curriculum_fidelity[enrollment_id] = "FULL"
+        contract.enrollment_instructor_fidelity[enrollment_id] = "MATCH"
+        contract.enrollment_appeal_result[enrollment_id] = "OVERTURNED"
+        contract.enrollment_appeal_appellant[enrollment_id] = ORGANIZER
+        contract.enrollment_appeal_stake[enrollment_id] = 7
+        contract.total_received += 7
+        contract.total_held += 7
+
+        self.assertEqual(contract.settle(enrollment_id), "MODULE_ACCEPTED")
+        self.assertEqual(contract.enrollment_next_module[enrollment_id], 2)
+        self.assertEqual(contract.enrollment_released_amount[enrollment_id], 67)
+        self.assertEqual(contract.enrollment_remaining_amount[enrollment_id], 34)
+        self.assertEqual(contract.total_held, 34)
+        self.assertEqual(contract.enrollment_status[enrollment_id], "MODULE_AWAITING")
+
+    def test_timed_out_checkpoint_can_run_jury_against_locked_terms(self):
+        contract, gl = load_production_harness()
+        terms_body = b"Locked terms require completion of the first module and its practical exercise."
+        delivery_body = b"Organizer evidence proves the first module and practical exercise were completed."
+        contract_digest = lambda body: "sha256:" + hashlib.sha256(body).hexdigest()
+        gl.message_raw = {"datetime": "2026-09-23T10:00:00Z"}
+        gl.message.sender_address = SenderAddress(ORGANIZER)
+        offering_id = contract.create_offering("Timeout Modules", "MOD-T", 90, 9, URL_TERMS, contract_digest(terms_body))
+        contract.configure_modules(offering_id, 3)
+        contract.lock_offering_curriculum(offering_id, DIGEST_CURRICULUM, "Prof. Timeout")
+        gl.message.sender_address = SenderAddress(STUDENT_A)
+        gl.message.value = 90
+        enrollment_id = contract.enroll(offering_id)
+        gl.message.sender_address = SenderAddress(ORGANIZER)
+        contract.submit_module_checkpoint(enrollment_id, 0, URL_DELIVERY, contract_digest(delivery_body))
+        gl.nondet.web.get = lambda url: types.SimpleNamespace(body={URL_TERMS: terms_body, URL_DELIVERY: delivery_body}[url])
+        gl.nondet.exec_prompt = lambda _prompt: "ACCEPTED"
+        gl.message_raw = {"datetime": "2026-09-23T10:01:00Z"}
+
+        self.assertEqual(contract.adjudicate_module_checkpoint(enrollment_id, 0), "MODULE_ACCEPTED")
+        self.assertEqual(contract.enrollment_organizer_paid[enrollment_id], 30)
+
     def test_appeal_adjudication_accepts_verified_text_containing_old_sentinel(self):
         contract, gl = load_production_harness()
         bodies = {

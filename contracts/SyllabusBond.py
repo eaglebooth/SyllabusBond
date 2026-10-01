@@ -1,4 +1,4 @@
-# v0.2.17
+# v0.3.0
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 from genlayer import *
 import typing
@@ -37,6 +37,7 @@ class SyllabusBond(gl.Contract):
     offering_curriculum_digest: TreeMap[u256, str]
     offering_instructor: TreeMap[u256, str]
     offering_status: TreeMap[u256, str]
+    offering_module_count: TreeMap[u256, u256]
 
     enrollment_offering: TreeMap[u256, u256]
     enrollment_student: TreeMap[u256, str]
@@ -52,6 +53,19 @@ class SyllabusBond(gl.Contract):
     enrollment_reason: TreeMap[u256, str]
     enrollment_organizer_paid: TreeMap[u256, u256]
     enrollment_student_refunded: TreeMap[u256, u256]
+    enrollment_next_module: TreeMap[u256, u256]
+    enrollment_released_amount: TreeMap[u256, u256]
+    enrollment_remaining_amount: TreeMap[u256, u256]
+    enrollment_module_recovery_deadline: TreeMap[u256, u256]
+
+    checkpoint_url: TreeMap[str, str]
+    checkpoint_digest: TreeMap[str, str]
+    checkpoint_dispute_url: TreeMap[str, str]
+    checkpoint_dispute_digest: TreeMap[str, str]
+    checkpoint_status: TreeMap[str, str]
+    checkpoint_decision: TreeMap[str, str]
+    checkpoint_reason: TreeMap[str, str]
+    checkpoint_review_deadline: TreeMap[str, u256]
 
     enrollment_pre_appeal_decision: TreeMap[u256, str]
     enrollment_appeal_appellant: TreeMap[u256, str]
@@ -134,6 +148,38 @@ class SyllabusBond(gl.Contract):
 
     def _sha256_digest(self, body: typing.Any) -> str:
         return "sha256:" + hashlib.sha256(body).hexdigest()
+
+    def _checkpoint_key(self, enrollment_id: u256, module_index: u256) -> str:
+        return str(int(enrollment_id)) + "_" + str(int(module_index))
+
+    def _release_module_tranche(self, enrollment_id: u256, module_index: u256) -> u256:
+        offering_id = self.enrollment_offering[enrollment_id]
+        module_count = self.offering_module_count.get(offering_id, u256(1))
+        fee = self.enrollment_fee[enrollment_id]
+        released = self.enrollment_released_amount.get(enrollment_id, u256(0))
+        target = (fee * (module_index + u256(1))) // module_count
+        tranche = target - released
+        remaining = self.enrollment_remaining_amount.get(enrollment_id, fee)
+        if tranche == u256(0) or tranche > remaining or tranche > self.total_held or tranche > self.balance:
+            raise gl.vm.UserError("MODULE_ACCOUNTING_INVARIANT_BROKEN")
+
+        organizer = self.offering_organizer[offering_id]
+        self.enrollment_released_amount[enrollment_id] = target
+        self.enrollment_remaining_amount[enrollment_id] = remaining - tranche
+        self.enrollment_organizer_paid[enrollment_id] = self.enrollment_organizer_paid[enrollment_id] + tranche
+        self.total_held = self.total_held - tranche
+        self.total_paid_to_organizers = self.total_paid_to_organizers + tranche
+        self.enrollment_next_module[enrollment_id] = module_index + u256(1)
+        if module_index + u256(1) == module_count:
+            self.enrollment_status[enrollment_id] = "SETTLED"
+            self.enrollment_decision[enrollment_id] = "DELIVERED"
+            self.enrollment_reason[enrollment_id] = "All module checkpoints accepted; tuition fully released."
+        else:
+            self.enrollment_status[enrollment_id] = "MODULE_AWAITING"
+            self.enrollment_reason[enrollment_id] = "Checkpoint accepted; awaiting the next module."
+            self.enrollment_module_recovery_deadline[enrollment_id] = self._now() + u256(120)
+        _Recipient(Address(organizer)).emit_transfer(value=tranche)
+        return tranche
 
     def _consistent_verdict(self, decision: str, curriculum: str, instructor: str) -> bool:
         if decision == "DELIVERED":
@@ -243,8 +289,22 @@ class SyllabusBond(gl.Contract):
         self.offering_curriculum_digest[offering_id] = ""
         self.offering_instructor[offering_id] = ""
         self.offering_status[offering_id] = "AWAITING_CURRICULUM_LOCK"
+        self.offering_module_count[offering_id] = u256(1)
         self.offering_count = offering_id + u256(1)
         return offering_id
+
+    @gl.public.write
+    def configure_modules(self, offering_id: u256, module_count: u256) -> str:
+        if offering_id >= self.offering_count:
+            raise gl.vm.UserError("OFFERING_NOT_FOUND")
+        if gl.message.sender_address.as_hex.lower() != self.offering_organizer[offering_id]:
+            raise gl.vm.UserError("ORGANIZER_ONLY")
+        if self.offering_status[offering_id] != "AWAITING_CURRICULUM_LOCK":
+            raise gl.vm.UserError("MODULES_ALREADY_LOCKED")
+        if module_count < u256(2) or module_count > u256(20):
+            raise gl.vm.UserError("INVALID_MODULE_COUNT")
+        self.offering_module_count[offering_id] = module_count
+        return "MODULES_CONFIGURED"
 
     @gl.public.write
     def lock_offering_curriculum(
@@ -313,6 +373,10 @@ class SyllabusBond(gl.Contract):
         self.enrollment_reason[enrollment_id] = "Enrollment funded; awaiting syllabus delivery evidence."
         self.enrollment_organizer_paid[enrollment_id] = u256(0)
         self.enrollment_student_refunded[enrollment_id] = u256(0)
+        self.enrollment_next_module[enrollment_id] = u256(0)
+        self.enrollment_released_amount[enrollment_id] = u256(0)
+        self.enrollment_remaining_amount[enrollment_id] = offering_fee
+        self.enrollment_module_recovery_deadline[enrollment_id] = self._now() + u256(120)
         self.enrollment_pre_appeal_decision[enrollment_id] = "NONE"
         self.enrollment_appeal_appellant[enrollment_id] = ""
         self.enrollment_appeal_url[enrollment_id] = ""
@@ -338,6 +402,8 @@ class SyllabusBond(gl.Contract):
         if enrollment_id >= self.enrollment_count:
             raise gl.vm.UserError("ENROLLMENT_NOT_FOUND")
         offering_id = self.enrollment_offering[enrollment_id]
+        if self.offering_module_count.get(offering_id, u256(1)) != u256(1):
+            raise gl.vm.UserError("USE_MODULE_CHECKPOINTS")
         organizer = gl.message.sender_address.as_hex.lower()
         if organizer != self.offering_organizer[offering_id]:
             raise gl.vm.UserError("ORGANIZER_ONLY")
@@ -361,6 +427,178 @@ class SyllabusBond(gl.Contract):
         self.enrollment_status[enrollment_id] = "CHALLENGE_WINDOW"
         self.enrollment_reason[enrollment_id] = "Delivery evidence submitted; student challenge window open."
         return "CHALLENGE_WINDOW_OPEN"
+
+    @gl.public.write
+    def submit_module_checkpoint(
+        self,
+        enrollment_id: u256,
+        module_index: u256,
+        evidence_url: str,
+        evidence_digest: str,
+    ) -> str:
+        if enrollment_id >= self.enrollment_count:
+            raise gl.vm.UserError("ENROLLMENT_NOT_FOUND")
+        offering_id = self.enrollment_offering[enrollment_id]
+        if self.offering_module_count.get(offering_id, u256(1)) <= u256(1):
+            raise gl.vm.UserError("LEGACY_OFFERING")
+        if gl.message.sender_address.as_hex.lower() != self.offering_organizer[offering_id]:
+            raise gl.vm.UserError("ORGANIZER_ONLY")
+        if self.enrollment_status[enrollment_id] not in ("FUNDED", "MODULE_AWAITING"):
+            raise gl.vm.UserError("CHECKPOINT_NOT_ALLOWED")
+        if module_index != self.enrollment_next_module.get(enrollment_id, u256(0)):
+            raise gl.vm.UserError("MODULE_OUT_OF_SEQUENCE")
+        if module_index >= self.offering_module_count[offering_id]:
+            raise gl.vm.UserError("MODULE_NOT_FOUND")
+        if not self._valid_immutable_url(evidence_url):
+            raise gl.vm.UserError("IMMUTABLE_DELIVERY_URL_REQUIRED")
+        if not self._valid_digest(evidence_digest):
+            raise gl.vm.UserError("INVALID_DELIVERY_DIGEST")
+        clean_digest = evidence_digest.lower()
+        if self.digest_claim_index.get(clean_digest, u256(0)) != u256(0):
+            raise gl.vm.UserError("DIGEST_ALREADY_USED")
+
+        key = self._checkpoint_key(enrollment_id, module_index)
+        now = self._now()
+        self.checkpoint_url[key] = evidence_url
+        self.checkpoint_digest[key] = clean_digest
+        self.checkpoint_dispute_url[key] = ""
+        self.checkpoint_dispute_digest[key] = ""
+        self.checkpoint_status[key] = "REVIEW"
+        self.checkpoint_decision[key] = "PENDING"
+        self.checkpoint_reason[key] = "Module evidence submitted; student review window open."
+        self.checkpoint_review_deadline[key] = now + u256(30)
+        self.digest_claim_index[clean_digest] = enrollment_id + u256(1)
+        self.enrollment_status[enrollment_id] = "MODULE_REVIEW"
+        self.enrollment_module_recovery_deadline[enrollment_id] = now + u256(120)
+        return "MODULE_REVIEW"
+
+    @gl.public.write
+    def accept_module_checkpoint(self, enrollment_id: u256, module_index: u256) -> str:
+        if enrollment_id >= self.enrollment_count:
+            raise gl.vm.UserError("ENROLLMENT_NOT_FOUND")
+        if gl.message.sender_address.as_hex.lower() != self.enrollment_student[enrollment_id]:
+            raise gl.vm.UserError("STUDENT_ONLY")
+        if module_index != self.enrollment_next_module.get(enrollment_id, u256(0)):
+            raise gl.vm.UserError("MODULE_OUT_OF_SEQUENCE")
+        key = self._checkpoint_key(enrollment_id, module_index)
+        if self.checkpoint_status.get(key, "NONE") != "REVIEW":
+            raise gl.vm.UserError("CHECKPOINT_NOT_REVIEWABLE")
+        if self._timing_available() and self._now() > self.checkpoint_review_deadline[key]:
+            raise gl.vm.UserError("CHECKPOINT_REVIEW_WINDOW_CLOSED")
+        self.checkpoint_status[key] = "ACCEPTED"
+        self.checkpoint_decision[key] = "ACCEPTED"
+        self.checkpoint_reason[key] = "Student accepted the module checkpoint."
+        self._release_module_tranche(enrollment_id, module_index)
+        return "MODULE_ACCEPTED"
+
+    @gl.public.write
+    def dispute_module_checkpoint(
+        self,
+        enrollment_id: u256,
+        module_index: u256,
+        dispute_url: str,
+        dispute_digest: str,
+    ) -> str:
+        if enrollment_id >= self.enrollment_count:
+            raise gl.vm.UserError("ENROLLMENT_NOT_FOUND")
+        if gl.message.sender_address.as_hex.lower() != self.enrollment_student[enrollment_id]:
+            raise gl.vm.UserError("STUDENT_ONLY")
+        if module_index != self.enrollment_next_module.get(enrollment_id, u256(0)):
+            raise gl.vm.UserError("MODULE_OUT_OF_SEQUENCE")
+        key = self._checkpoint_key(enrollment_id, module_index)
+        if self.checkpoint_status.get(key, "NONE") != "REVIEW":
+            raise gl.vm.UserError("CHECKPOINT_NOT_REVIEWABLE")
+        if self._timing_available() and self._now() > self.checkpoint_review_deadline[key]:
+            raise gl.vm.UserError("CHECKPOINT_REVIEW_WINDOW_CLOSED")
+        if not self._valid_immutable_url(dispute_url):
+            raise gl.vm.UserError("IMMUTABLE_DISPUTE_URL_REQUIRED")
+        if not self._valid_digest(dispute_digest):
+            raise gl.vm.UserError("INVALID_DISPUTE_DIGEST")
+        clean_digest = dispute_digest.lower()
+        if self.digest_claim_index.get(clean_digest, u256(0)) != u256(0):
+            raise gl.vm.UserError("DIGEST_ALREADY_USED")
+        self.checkpoint_dispute_url[key] = dispute_url
+        self.checkpoint_dispute_digest[key] = clean_digest
+        self.checkpoint_status[key] = "DISPUTED"
+        self.checkpoint_reason[key] = "Student disputed this module; awaiting GenLayer jury."
+        self.digest_claim_index[clean_digest] = enrollment_id + u256(1)
+        self.enrollment_status[enrollment_id] = "MODULE_DISPUTED"
+        self.enrollment_module_recovery_deadline[enrollment_id] = self._now() + u256(120)
+        return "MODULE_DISPUTED"
+
+    @gl.public.write
+    def adjudicate_module_checkpoint(self, enrollment_id: u256, module_index: u256) -> str:
+        if enrollment_id >= self.enrollment_count:
+            raise gl.vm.UserError("ENROLLMENT_NOT_FOUND")
+        if module_index != self.enrollment_next_module.get(enrollment_id, u256(0)):
+            raise gl.vm.UserError("MODULE_OUT_OF_SEQUENCE")
+        key = self._checkpoint_key(enrollment_id, module_index)
+        checkpoint_state = self.checkpoint_status.get(key, "NONE")
+        timed_out_review = checkpoint_state == "REVIEW" and self._timing_available() and self._now() > self.checkpoint_review_deadline[key]
+        if checkpoint_state != "DISPUTED" and not timed_out_review:
+            raise gl.vm.UserError("CHECKPOINT_NOT_READY_FOR_JURY")
+        offering_id = self.enrollment_offering[enrollment_id]
+        evidence_url = self.checkpoint_url[key]
+        evidence_digest = self.checkpoint_digest[key]
+        dispute_url = self.checkpoint_dispute_url[key]
+        dispute_digest = self.checkpoint_dispute_digest[key]
+        terms_url = self.offering_terms_url[offering_id]
+        terms_digest = self.offering_terms_digest[offering_id]
+
+        def evaluate_checkpoint() -> str:
+            try:
+                terms_body = gl.nondet.web.get(terms_url).body
+                evidence_body = gl.nondet.web.get(evidence_url).body
+                dispute_body = b"No student dispute was submitted before the review deadline."
+                if len(dispute_url) > 0:
+                    dispute_body = gl.nondet.web.get(dispute_url).body
+                if self._sha256_digest(terms_body).lower() != terms_digest.lower():
+                    return "UNAVAILABLE"
+                if self._sha256_digest(evidence_body).lower() != evidence_digest.lower():
+                    return "UNAVAILABLE"
+                if len(dispute_url) > 0 and self._sha256_digest(dispute_body).lower() != dispute_digest.lower():
+                    return "UNAVAILABLE"
+                prompt = f"""You are the SyllabusBond module checkpoint jury.
+Decide whether the organizer proved delivery of module {int(module_index) + 1} under the locked curriculum.
+LOCKED TERMS:\n{terms_body.decode('utf-8')[:2200]}
+ORGANIZER EVIDENCE:\n{evidence_body.decode('utf-8')[:2200]}
+STUDENT DISPUTE:\n{dispute_body.decode('utf-8')[:2200]}
+Return exactly one label: ACCEPTED, REJECTED, or UNAVAILABLE."""
+                result = str(gl.nondet.exec_prompt(prompt)).strip().upper()
+                return result if result in ("ACCEPTED", "REJECTED", "UNAVAILABLE") else "UNAVAILABLE"
+            except Exception:
+                return "UNAVAILABLE"
+
+        principle = "Outputs are equivalent only when the exact label matches. ACCEPTED, REJECTED, and UNAVAILABLE are never equivalent because each has a different economic outcome."
+        decision = str(gl.eq_principle.prompt_comparative(evaluate_checkpoint, principle)).strip().upper()
+        if decision not in ("ACCEPTED", "REJECTED", "UNAVAILABLE"):
+            decision = "UNAVAILABLE"
+        self.checkpoint_decision[key] = decision
+        if decision == "ACCEPTED":
+            self.checkpoint_status[key] = "ACCEPTED"
+            self.checkpoint_reason[key] = "GenLayer jury accepted the verified module evidence."
+            self._release_module_tranche(enrollment_id, module_index)
+            return "MODULE_ACCEPTED"
+        if decision == "REJECTED":
+            self.checkpoint_status[key] = "REJECTED"
+            self.checkpoint_reason[key] = "GenLayer jury rejected the module evidence; appeal window open."
+            self.enrollment_delivery_url[enrollment_id] = evidence_url
+            self.enrollment_delivery_digest[enrollment_id] = evidence_digest
+            self.enrollment_dispute_url[enrollment_id] = dispute_url
+            self.enrollment_dispute_digest[enrollment_id] = dispute_digest
+            self.enrollment_status[enrollment_id] = "ADJUDICATED"
+            self.enrollment_decision[enrollment_id] = "NOT_DELIVERED"
+            self.enrollment_curriculum_fidelity[enrollment_id] = "BREACH"
+            self.enrollment_instructor_fidelity[enrollment_id] = "MATCH"
+            self.enrollment_reason[enrollment_id] = "Module checkpoint rejected; remaining escrow is appealable."
+            self.enrollment_appeal_deadline[enrollment_id] = self._now() + u256(60)
+            return "ADJUDICATED"
+        self.checkpoint_status[key] = "UNAVAILABLE"
+        self.checkpoint_reason[key] = "Evidence or consensus unavailable; bounded recovery enabled."
+        self.enrollment_status[enrollment_id] = "MODULE_RECOVERY_WAIT"
+        self.enrollment_decision[enrollment_id] = "EVIDENCE_UNAVAILABLE"
+        self.enrollment_reason[enrollment_id] = "Module evidence unavailable; remaining escrow entered recovery."
+        return "MODULE_RECOVERY_WAIT"
 
     @gl.public.write
     def submit_dispute_evidence(
@@ -419,21 +657,23 @@ class SyllabusBond(gl.Contract):
         student = gl.message.sender_address.as_hex.lower()
         if student != self.enrollment_student[enrollment_id]:
             raise gl.vm.UserError("STUDENT_ONLY")
-        if self.enrollment_status[enrollment_id] != "FUNDED":
+        if self.enrollment_status[enrollment_id] not in ("FUNDED", "MODULE_AWAITING"):
             raise gl.vm.UserError("CANNOT_CANCEL_IN_CURRENT_STATE")
 
-        fee = self.enrollment_fee[enrollment_id]
-        if fee > self.total_held or fee > self.balance:
+        remaining = self.enrollment_remaining_amount.get(enrollment_id, self.enrollment_fee[enrollment_id])
+        if remaining > self.total_held or remaining > self.balance:
             raise gl.vm.UserError("HELD_FUNDS_INVARIANT_BROKEN")
 
         self.enrollment_status[enrollment_id] = "CANCELLED"
         self.enrollment_decision[enrollment_id] = "CANCELLED"
-        self.enrollment_reason[enrollment_id] = "Student cancelled before delivery; full tuition refunded."
-        self.enrollment_student_refunded[enrollment_id] = fee
-        self.total_held = self.total_held - fee
-        self.total_refunded_to_students = self.total_refunded_to_students + fee
+        self.enrollment_reason[enrollment_id] = "Student cancelled; all undelivered tuition was refunded."
+        self.enrollment_remaining_amount[enrollment_id] = u256(0)
+        self.enrollment_student_refunded[enrollment_id] = self.enrollment_student_refunded[enrollment_id] + remaining
+        self.total_held = self.total_held - remaining
+        self.total_refunded_to_students = self.total_refunded_to_students + remaining
 
-        _Recipient(Address(student)).emit_transfer(value=fee)
+        if remaining > u256(0):
+            _Recipient(Address(student)).emit_transfer(value=remaining)
         return "CANCELLED"
 
     @gl.public.write
@@ -574,7 +814,7 @@ A paying outcome and non-paying outcome are NEVER equivalent."""
         if self.digest_claim_index.get(clean_digest, u256(0)) != u256(0):
             raise gl.vm.UserError("DIGEST_ALREADY_USED")
 
-        fee = self.enrollment_fee[enrollment_id]
+        fee = self.enrollment_remaining_amount.get(enrollment_id, self.enrollment_fee[enrollment_id])
         required_stake = (fee + u256(9)) // u256(10)
         if gl.message.value != required_stake:
             raise gl.vm.UserError("EXACT_APPEAL_STAKE_REQUIRED")
@@ -687,8 +927,9 @@ UPHELD means the decision is unchanged. OVERTURNED means the decision changed.""
         offering_id = self.enrollment_offering[enrollment_id]
         organizer = self.offering_organizer[offering_id]
         student = self.enrollment_student[enrollment_id]
-        fee = self.enrollment_fee[enrollment_id]
+        fee = self.enrollment_remaining_amount.get(enrollment_id, self.enrollment_fee[enrollment_id])
         appeal_stake = self.enrollment_appeal_stake.get(enrollment_id, u256(0))
+        module_count = self.offering_module_count.get(offering_id, u256(1))
 
         decision = self.enrollment_decision[enrollment_id]
         if not self._consistent_verdict(
@@ -700,6 +941,27 @@ UPHELD means the decision is unchanged. OVERTURNED means the decision changed.""
 
         organizer_payout = u256(0)
         student_refund = u256(0)
+
+        if module_count > u256(1) and status == "APPEAL_RESOLVED" and self.enrollment_appeal_result[enrollment_id] == "OVERTURNED":
+            if decision != "DELIVERED":
+                raise gl.vm.UserError("MODULE_APPEAL_MUST_ACCEPT_OR_UPHOLD")
+            module_index = self.enrollment_next_module[enrollment_id]
+            self._release_module_tranche(enrollment_id, module_index)
+            appellant = self.enrollment_appeal_appellant[enrollment_id]
+            if appellant == organizer:
+                self.enrollment_organizer_paid[enrollment_id] = self.enrollment_organizer_paid[enrollment_id] + appeal_stake
+                self.total_paid_to_organizers = self.total_paid_to_organizers + appeal_stake
+                if appeal_stake > u256(0):
+                    _Recipient(Address(organizer)).emit_transfer(value=appeal_stake)
+            else:
+                self.enrollment_student_refunded[enrollment_id] = self.enrollment_student_refunded[enrollment_id] + appeal_stake
+                self.total_refunded_to_students = self.total_refunded_to_students + appeal_stake
+                if appeal_stake > u256(0):
+                    _Recipient(Address(student)).emit_transfer(value=appeal_stake)
+            self.total_held = self.total_held - appeal_stake
+            self.enrollment_appeal_stake[enrollment_id] = u256(0)
+            self.enrollment_reason[enrollment_id] = "Module appeal accepted; one tranche released and future tuition remains protected."
+            return "MODULE_ACCEPTED"
 
         if decision == "DELIVERED":
             organizer_payout = fee
@@ -735,8 +997,9 @@ UPHELD means the decision is unchanged. OVERTURNED means the decision changed.""
         if total_case_value > self.total_held or total_case_value > self.balance:
             raise gl.vm.UserError("HELD_FUNDS_INSUFFICIENT")
 
-        self.enrollment_organizer_paid[enrollment_id] = organizer_payout
-        self.enrollment_student_refunded[enrollment_id] = student_refund
+        self.enrollment_organizer_paid[enrollment_id] = self.enrollment_organizer_paid.get(enrollment_id, u256(0)) + organizer_payout
+        self.enrollment_student_refunded[enrollment_id] = self.enrollment_student_refunded.get(enrollment_id, u256(0)) + student_refund
+        self.enrollment_remaining_amount[enrollment_id] = u256(0)
         self.enrollment_status[enrollment_id] = "SETTLED"
         self.total_held = self.total_held - total_case_value
         self.total_paid_to_organizers = self.total_paid_to_organizers + organizer_payout
@@ -754,12 +1017,12 @@ UPHELD means the decision is unchanged. OVERTURNED means the decision changed.""
         if enrollment_id >= self.enrollment_count:
             raise gl.vm.UserError("ENROLLMENT_NOT_FOUND")
         status = self.enrollment_status[enrollment_id]
-        if status not in ("RECOVERY_WAIT", "APPEAL_PENDING"):
+        if status not in ("RECOVERY_WAIT", "MODULE_RECOVERY_WAIT", "APPEAL_PENDING"):
             # A failed/rolled-back evidence transaction can leave funded escrow
             # in a pre-review state. Permit a party to recover it only after the
             # offering's bounded recovery deadline and only when chain time is
             # available; this preserves the early-recovery guard in local VMs.
-            if status not in ("FUNDED", "CHALLENGE_WINDOW", "READY_FOR_REVIEW") or not self._timing_available():
+            if status not in ("FUNDED", "MODULE_AWAITING", "MODULE_REVIEW", "MODULE_DISPUTED", "CHALLENGE_WINDOW", "READY_FOR_REVIEW") or not self._timing_available():
                 raise gl.vm.UserError("NOT_IN_RECOVERY_STATE")
 
         sender = gl.message.sender_address.as_hex.lower()
@@ -770,12 +1033,14 @@ UPHELD means the decision is unchanged. OVERTURNED means the decision changed.""
         if sender != organizer and sender != student:
             raise gl.vm.UserError("PARTY_ONLY")
         recovery_deadline = self.offering_recovery_deadline[offering_id]
+        if self.offering_module_count.get(offering_id, u256(1)) > u256(1):
+            recovery_deadline = self.enrollment_module_recovery_deadline[enrollment_id]
         if self.enrollment_appeal_stake.get(enrollment_id, u256(0)) > u256(0):
             recovery_deadline = self.enrollment_appeal_recovery_deadline[enrollment_id]
         if self._timing_available() and self._now() < recovery_deadline:
             raise gl.vm.UserError("RECOVERY_WINDOW_ACTIVE")
 
-        fee = self.enrollment_fee[enrollment_id]
+        fee = self.enrollment_remaining_amount.get(enrollment_id, self.enrollment_fee[enrollment_id])
         appeal_stake = self.enrollment_appeal_stake.get(enrollment_id, u256(0))
         total_case_value = fee + appeal_stake
         if total_case_value > self.total_held or total_case_value > self.balance:
@@ -789,8 +1054,9 @@ UPHELD means the decision is unchanged. OVERTURNED means the decision changed.""
             else:
                 student_refund = student_refund + appeal_stake
 
-        self.enrollment_organizer_paid[enrollment_id] = organizer_payout
-        self.enrollment_student_refunded[enrollment_id] = student_refund
+        self.enrollment_organizer_paid[enrollment_id] = self.enrollment_organizer_paid.get(enrollment_id, u256(0)) + organizer_payout
+        self.enrollment_student_refunded[enrollment_id] = self.enrollment_student_refunded.get(enrollment_id, u256(0)) + student_refund
+        self.enrollment_remaining_amount[enrollment_id] = u256(0)
         self.enrollment_status[enrollment_id] = "RECOVERED"
         self.enrollment_decision[enrollment_id] = "RECOVERED"
         self.enrollment_reason[enrollment_id] = "Recovery split executed deterministically following unresolvable evidence."
@@ -834,6 +1100,7 @@ UPHELD means the decision is unchanged. OVERTURNED means the decision changed.""
             "curriculum_digest": self.offering_curriculum_digest[offering_id],
             "instructor": self.offering_instructor[offering_id],
             "status": self.offering_status[offering_id],
+            "module_count": int(self.offering_module_count.get(offering_id, u256(1))),
         }
 
     @gl.public.view
@@ -858,6 +1125,46 @@ UPHELD means the decision is unchanged. OVERTURNED means the decision changed.""
             "appeal_result": self.enrollment_appeal_result.get(enrollment_id, "NONE"),
             "appeal_deadline": int(self.enrollment_appeal_deadline.get(enrollment_id, u256(0))),
             "appeal_recovery_deadline": int(self.enrollment_appeal_recovery_deadline.get(enrollment_id, u256(0))),
+            "next_module": int(self.enrollment_next_module.get(enrollment_id, u256(0))),
+            "released_amount": int(self.enrollment_released_amount.get(enrollment_id, u256(0))),
+            "remaining_amount": int(self.enrollment_remaining_amount.get(enrollment_id, self.enrollment_fee[enrollment_id])),
+            "module_recovery_deadline": int(self.enrollment_module_recovery_deadline.get(enrollment_id, u256(0))),
+        }
+
+    @gl.public.view
+    def get_module_progress(self, enrollment_id: u256) -> typing.Any:
+        if enrollment_id >= self.enrollment_count:
+            raise gl.vm.UserError("ENROLLMENT_NOT_FOUND")
+        offering_id = self.enrollment_offering[enrollment_id]
+        return {
+            "enrollment_id": int(enrollment_id),
+            "module_count": int(self.offering_module_count.get(offering_id, u256(1))),
+            "next_module": int(self.enrollment_next_module.get(enrollment_id, u256(0))),
+            "released_amount": int(self.enrollment_released_amount.get(enrollment_id, u256(0))),
+            "remaining_amount": int(self.enrollment_remaining_amount.get(enrollment_id, self.enrollment_fee[enrollment_id])),
+            "recovery_deadline": int(self.enrollment_module_recovery_deadline.get(enrollment_id, u256(0))),
+            "status": self.enrollment_status[enrollment_id],
+        }
+
+    @gl.public.view
+    def get_module_checkpoint(self, enrollment_id: u256, module_index: u256) -> typing.Any:
+        if enrollment_id >= self.enrollment_count:
+            raise gl.vm.UserError("ENROLLMENT_NOT_FOUND")
+        offering_id = self.enrollment_offering[enrollment_id]
+        if module_index >= self.offering_module_count.get(offering_id, u256(1)):
+            raise gl.vm.UserError("MODULE_NOT_FOUND")
+        key = self._checkpoint_key(enrollment_id, module_index)
+        return {
+            "enrollment_id": int(enrollment_id),
+            "module_index": int(module_index),
+            "evidence_url": self.checkpoint_url.get(key, ""),
+            "evidence_digest": self.checkpoint_digest.get(key, ""),
+            "dispute_url": self.checkpoint_dispute_url.get(key, ""),
+            "dispute_digest": self.checkpoint_dispute_digest.get(key, ""),
+            "status": self.checkpoint_status.get(key, "NOT_SUBMITTED"),
+            "decision": self.checkpoint_decision.get(key, "PENDING"),
+            "reason": self.checkpoint_reason.get(key, "Awaiting checkpoint submission."),
+            "review_deadline": int(self.checkpoint_review_deadline.get(key, u256(0))),
         }
 
     @gl.public.view

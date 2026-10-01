@@ -47,16 +47,16 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
   const [appealUrl, setAppealUrl] = useState("");
   const [appealDigest, setAppealDigest] = useState("");
 
-  const feeFormatted = formatGen(enrollment.fee);
+  const feeFormatted = formatGen(enrollment.remaining_amount ?? enrollment.fee);
   const challengeDue = nowSeconds >= offering.challenge_deadline;
   const effectiveRecoveryDeadline = asGenBigInt(enrollment.appeal_stake) > BigInt(0)
     ? enrollment.appeal_recovery_deadline
-    : offering.recovery_deadline;
+    : (enrollment.module_recovery_deadline || offering.recovery_deadline);
   const recoveryDue = nowSeconds >= effectiveRecoveryDeadline;
   const appealWindowOpen = enrollment.appeal_deadline > 0 && nowSeconds <= enrollment.appeal_deadline;
   const deliveryOpen = nowSeconds <= offering.delivery_deadline;
   const appealStake = (() => {
-    return (asGenBigInt(enrollment.fee) + BigInt(9)) / BigInt(10);
+    return (asGenBigInt(enrollment.remaining_amount ?? enrollment.fee) + BigInt(9)) / BigInt(10);
   })();
   const txExplorerUrl = lastTxHash ? transactionExplorerUrl(lastTxHash) : "";
 
@@ -479,7 +479,7 @@ export const EnrollmentWorkspace: React.FC<EnrollmentWorkspaceProps> = ({
           )}
 
           {/* Phase 5: RECOVERY_WAIT */}
-          {enrollment.status === "RECOVERY_WAIT" && (
+          {(enrollment.status === "RECOVERY_WAIT" || enrollment.status === "MODULE_RECOVERY_WAIT") && (
             <div className="space-y-4">
               <div className="notice-warning">
                 <strong>Recovery Mode Active</strong>

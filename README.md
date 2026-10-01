@@ -1,5 +1,7 @@
 # SyllabusBond — Decentralized Syllabus Delivery & Tuition Escrow
 
+> **Current source release**: v0.3.0 Progressive Module Escrow. The address below remains historical v0.2.17 until the new funded lifecycle passes on Studionet.
+
 > **Deployed Contract Target**: `0x681B80032A0BAfB263062418a462E39951e32532` (GenLayer Studionet, Chain 61999)  
 > **Explorer**: [https://explorer-studio.genlayer.com/address/0x681B80032A0BAfB263062418a462E39951e32532](https://explorer-studio.genlayer.com/address/0x681B80032A0BAfB263062418a462E39951e32532)
 
@@ -22,6 +24,10 @@ The landing page and verification ledger read counts, custody totals, and the la
 After the first jury ruling, either party may open one appeal with immutable new evidence and a 10% tuition stake rounded up to the smallest GEN unit. A second GenLayer consensus round can uphold or overturn the original decision. Overturned appeals return the stake to the appellant; upheld appeals award it to the counterparty. Settlement conserves tuition plus stake, while unresolved appeal consensus fails closed into bounded recovery.
 
 The enrollment workspace also reads every evidence commitment and deadline directly from the contract. It independently recomputes SHA-256 in the browser, displays lifecycle countdowns, gates time-sensitive actions, and links accepted transactions to GenLayer Explorer. This v2 milestone changes contract storage and therefore requires a new Studionet deployment before the frontend address is switched.
+
+### Progressive Module Escrow v0.3
+
+Organizers may configure 2–20 sequential course modules before locking the curriculum. Each module has an immutable evidence checkpoint. Student acceptance releases one deterministic tuition tranche; a dispute sends digest-verified evidence to a GenLayer `prompt_comparative` jury. Cumulative allocation makes the final tranche absorb integer rounding, while cancellation, appeals, settlement, and recovery operate only on escrow not already released.
 
 ---
 

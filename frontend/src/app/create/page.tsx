@@ -18,6 +18,7 @@ export default function CreateOfferingPage() {
   const [durationHours, setDurationHours] = useState("");
   const [termsUrl, setTermsUrl] = useState("");
   const [termsDigest, setTermsDigest] = useState("");
+  const [moduleCount, setModuleCount] = useState("3");
 
   // Step 2: Locked Commitments
   const [curriculumDigest, setCurriculumDigest] = useState("");
@@ -60,7 +61,7 @@ export default function CreateOfferingPage() {
   const handleFinalSubmit = async () => {
     setLoading(true);
     setErrorMsg("");
-    setStatusMsg("Step 1/2: Submitting course terms to GenLayer contract...");
+    setStatusMsg("Step 1/3: Submitting course terms to GenLayer contract...");
 
     try {
       const feeAmount = parseGenInput(feeEth);
@@ -91,7 +92,17 @@ export default function CreateOfferingPage() {
       }
       setCreatedId(offeringId);
 
-      setStatusMsg("Step 2/2: Locking curriculum digest and instructor on-chain...");
+      const modules = parseInt(moduleCount, 10);
+      if (modules > 1) {
+        setStatusMsg("Step 2/3: Configuring progressive module escrow...");
+        const moduleResult = await writeContract("configure_modules", [offeringId, BigInt(modules)]);
+        if (!moduleResult.success) {
+          setErrorMsg(moduleResult.error || "Failed to configure progressive modules.");
+          return;
+        }
+      }
+
+      setStatusMsg("Step 3/3: Locking curriculum digest and instructor on-chain...");
 
       const res2 = await writeContract("lock_offering_curriculum", [
         offeringId,
@@ -216,6 +227,16 @@ export default function CreateOfferingPage() {
                     onChange={(e) => setTitle(e.target.value)}
                     className="input-academic"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#44403c] mb-1">
+                    Progressive Escrow Modules
+                  </label>
+                  <input type="number" min="1" max="20" required value={moduleCount} onChange={(e) => setModuleCount(e.target.value)} className="input-academic" />
+                  <p className="text-[12px] text-[#78716c] mt-1 leading-normal">
+                    Choose 2–20 modules to release tuition checkpoint by checkpoint. Use 1 for the legacy all-or-nothing flow.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -381,6 +402,10 @@ export default function CreateOfferingPage() {
                   <div className="flex justify-between">
                     <span className="text-[#78716c]">Lead Instructor:</span>
                     <span className="font-semibold text-[#1c1917]">{instructor}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#78716c]">Escrow Release:</span>
+                    <span className="font-semibold text-[#1c1917]">{moduleCount} sequential module{moduleCount === "1" ? "" : "s"}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[#78716c]">Curriculum Digest:</span>

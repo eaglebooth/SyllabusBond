@@ -37,7 +37,7 @@ class ContractStaticTests(unittest.TestCase):
         self.assertEqual(
             SOURCE.splitlines()[:3],
             [
-                "# v0.2.17",
+                "# v0.3.0",
                 '# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }',
                 "from genlayer import *",
             ],
@@ -63,7 +63,8 @@ class ContractStaticTests(unittest.TestCase):
         self.assertIn("@gl.public.write.payable", SOURCE)
         self.assertIn("emit_transfer(value=organizer_payout)", SOURCE)
         self.assertIn("emit_transfer(value=student_refund)", SOURCE)
-        self.assertIn("emit_transfer(value=fee)", SOURCE)
+        self.assertIn("emit_transfer(value=remaining)", SOURCE)
+        self.assertIn("emit_transfer(value=tranche)", SOURCE)
         self.assertIn("hashlib.sha256", SOURCE)
         self.assertIn("gl.nondet.web.get", SOURCE)
 

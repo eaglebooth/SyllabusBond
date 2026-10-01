@@ -15,6 +15,7 @@ export type Offering = {
   curriculum_digest: string;
   instructor: string;
   status: "AWAITING_CURRICULUM_LOCK" | "OPEN" | "CLOSED";
+  module_count: number;
 };
 
 export type EnrollmentEvidence = {
@@ -41,6 +42,10 @@ export type Enrollment = {
     | "APPEAL_RESOLVED"
     | "SETTLED"
     | "RECOVERY_WAIT"
+    | "MODULE_AWAITING"
+    | "MODULE_REVIEW"
+    | "MODULE_DISPUTED"
+    | "MODULE_RECOVERY_WAIT"
     | "RECOVERED"
     | "CANCELLED";
   decision: "PENDING" | "DELIVERED" | "MATERIALLY_REDUCED" | "NOT_DELIVERED" | "EVIDENCE_UNAVAILABLE" | "CANCELLED" | "RECOVERED";
@@ -55,6 +60,33 @@ export type Enrollment = {
   appeal_result: "NONE" | "PENDING" | "UPHELD" | "OVERTURNED" | "UNRESOLVED";
   appeal_deadline: number;
   appeal_recovery_deadline: number;
+  next_module: number;
+  released_amount: GenAmount;
+  remaining_amount: GenAmount;
+  module_recovery_deadline: number;
+};
+
+export type ModuleProgress = {
+  enrollment_id: number;
+  module_count: number;
+  next_module: number;
+  released_amount: GenAmount;
+  remaining_amount: GenAmount;
+  recovery_deadline: number;
+  status: Enrollment["status"];
+};
+
+export type ModuleCheckpoint = {
+  enrollment_id: number;
+  module_index: number;
+  evidence_url: string;
+  evidence_digest: string;
+  dispute_url: string;
+  dispute_digest: string;
+  status: "NOT_SUBMITTED" | "REVIEW" | "DISPUTED" | "ACCEPTED" | "REJECTED" | "UNAVAILABLE";
+  decision: "PENDING" | "ACCEPTED" | "REJECTED" | "UNAVAILABLE";
+  reason: string;
+  review_deadline: number;
 };
 
 export type ContractTotals = {

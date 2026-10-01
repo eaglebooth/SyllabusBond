@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { EnrollmentWorkspace } from "@/components/EnrollmentWorkspace";
-import { Offering, Enrollment, EnrollmentEvidence } from "@/lib/types";
+import { ModuleCheckpointPanel } from "@/components/ModuleCheckpointPanel";
+import { Offering, Enrollment, EnrollmentEvidence, ModuleCheckpoint, ModuleProgress } from "@/lib/types";
 import { connectWallet, readContract, configuredAddress } from "@/lib/genlayer";
 
 function WorkspaceContent() {
@@ -16,6 +17,8 @@ function WorkspaceContent() {
   const [offerings, setOfferings] = useState<Offering[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [evidenceByEnrollment, setEvidenceByEnrollment] = useState<Record<number, EnrollmentEvidence>>({});
+  const [progressByEnrollment, setProgressByEnrollment] = useState<Record<number, ModuleProgress>>({});
+  const [checkpointsByEnrollment, setCheckpointsByEnrollment] = useState<Record<number, ModuleCheckpoint[]>>({});
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<number | null>(initialId);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const activeAddress = configuredAddress();
@@ -41,16 +44,36 @@ function WorkspaceContent() {
 
         const fetchedEnrollments: Enrollment[] = [];
         const fetchedEvidence: Record<number, EnrollmentEvidence> = {};
+        const fetchedProgress: Record<number, ModuleProgress> = {};
+        const fetchedCheckpoints: Record<number, ModuleCheckpoint[]> = {};
         for (let i = 0; i < enrCount; i++) {
           const enrRes = await readContract("get_enrollment", [BigInt(i)]);
           if (enrRes.success && enrRes.data) fetchedEnrollments.push(enrRes.data as Enrollment);
           else complete = false;
+          if (enrRes.success && enrRes.data) {
+            const enrollment = enrRes.data as Enrollment;
+            const offering = fetchedOfferings.find((item) => item.id === enrollment.offering_id);
+            if ((offering?.module_count ?? 1) > 1) {
+              const progressRes = await readContract("get_module_progress", [BigInt(i)]);
+              if (progressRes.success && progressRes.data) fetchedProgress[i] = progressRes.data as ModuleProgress;
+              else complete = false;
+              const moduleItems: ModuleCheckpoint[] = [];
+              for (let moduleIndex = 0; moduleIndex < (offering?.module_count ?? 0); moduleIndex += 1) {
+                const checkpointRes = await readContract("get_module_checkpoint", [BigInt(i), BigInt(moduleIndex)]);
+                if (checkpointRes.success && checkpointRes.data) moduleItems.push(checkpointRes.data as ModuleCheckpoint);
+                else complete = false;
+              }
+              fetchedCheckpoints[i] = moduleItems;
+            }
+          }
           const evidenceRes = await readContract("get_enrollment_evidence", [BigInt(i)]);
           if (evidenceRes.success && evidenceRes.data) fetchedEvidence[i] = evidenceRes.data as EnrollmentEvidence;
           else complete = false;
         }
         setEnrollments(fetchedEnrollments);
         setEvidenceByEnrollment(fetchedEvidence);
+        setProgressByEnrollment(fetchedProgress);
+        setCheckpointsByEnrollment(fetchedCheckpoints);
 
         if (selectedEnrollmentId === null && fetchedEnrollments.length > 0) {
           const own = fetchedEnrollments.find((item) => item.student.toLowerCase() === account.toLowerCase());
@@ -124,7 +147,16 @@ function WorkspaceContent() {
         </div>
 
         {selectedOffering && selectedEnrollment ? (
-          <EnrollmentWorkspace
+          <>
+          {(selectedOffering.module_count ?? 1) > 1 && progressByEnrollment[selectedEnrollment.id] ? <ModuleCheckpointPanel
+            offering={selectedOffering}
+            enrollment={selectedEnrollment}
+            progress={progressByEnrollment[selectedEnrollment.id]}
+            checkpoints={checkpointsByEnrollment[selectedEnrollment.id] ?? []}
+            account={account}
+            onRefresh={fetchState}
+          /> : null}
+          {((selectedOffering.module_count ?? 1) <= 1 || ["ADJUDICATED", "APPEAL_PENDING", "APPEAL_RESOLVED", "MODULE_RECOVERY_WAIT", "RECOVERED", "SETTLED", "CANCELLED"].includes(selectedEnrollment.status)) ? <EnrollmentWorkspace
             offering={selectedOffering}
             enrollment={selectedEnrollment}
             evidence={evidenceByEnrollment[selectedEnrollment.id] ?? null}
@@ -133,7 +165,8 @@ function WorkspaceContent() {
             onBack={() => {
               window.location.href = "/offerings";
             }}
-          />
+          /> : null}
+          </>
         ) : (
           <div className="card-ledger p-12 text-center max-w-md mx-auto space-y-3">
             <h3 className="font-serif text-base font-bold text-[#1c1917]">No Active Enrollment</h3>
